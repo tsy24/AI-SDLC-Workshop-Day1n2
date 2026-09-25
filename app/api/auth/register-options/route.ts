@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateRegistrationOptions } from '@simplewebauthn/server';
 
 import { challengeDB, userDB } from '@/lib/db';
+import { getWebAuthnConfig } from '@/lib/config';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -16,9 +17,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Username already taken' }, { status: 409 });
     }
 
+    const { rpId, rpName } = getWebAuthnConfig();
     const options = await generateRegistrationOptions({
-        rpName: process.env.RP_NAME ?? 'Todo App',
-        rpID: process.env.RP_ID ?? 'localhost',
+        rpName,
+        rpID: rpId,
         userName: trimmed,
         attestationType: 'none',
     });

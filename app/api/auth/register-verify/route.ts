@@ -3,6 +3,7 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server';
 
 import { createSession } from '@/lib/auth';
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
+import { getWebAuthnConfig } from '@/lib/config';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -22,11 +23,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Registration challenge expired' }, { status: 401 });
     }
 
+    const { rpId, rpOrigin } = getWebAuthnConfig();
     const verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: process.env.RP_ORIGIN ?? 'http://localhost:3000',
-        expectedRPID: process.env.RP_ID ?? 'localhost',
+        expectedOrigin: rpOrigin,
+        expectedRPID: rpId,
     });
     if (!verification.verified || !verification.registrationInfo) {
         return NextResponse.json({ error: 'Registration verification failed' }, { status: 401 });

@@ -3,6 +3,7 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 
 import { createSession } from '@/lib/auth';
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
+import { getWebAuthnConfig } from '@/lib/config';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -29,11 +30,12 @@ export async function POST(request: NextRequest) {
     if (!expectedChallenge) {
         return NextResponse.json({ error: 'Login challenge expired' }, { status: 401 });
     }
+    const { rpId, rpOrigin } = getWebAuthnConfig();
     const verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: process.env.RP_ORIGIN ?? 'http://localhost:3000',
-        expectedRPID: process.env.RP_ID ?? 'localhost',
+        expectedOrigin: rpOrigin,
+        expectedRPID: rpId,
         credential: {
             id: authenticator.credential_id,
             publicKey: new Uint8Array(authenticator.credential_public_key) as Uint8Array<ArrayBuffer>,

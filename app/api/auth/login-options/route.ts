@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { generateAuthenticationOptions } from '@simplewebauthn/server';
 
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
+import { getWebAuthnConfig } from '@/lib/config';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
@@ -17,8 +18,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
+    const { rpId } = getWebAuthnConfig();
     const options = await generateAuthenticationOptions({
-        rpID: process.env.RP_ID ?? 'localhost',
+        rpID: rpId,
         allowCredentials: authenticatorDB.findByUserId(user.id).map((authenticator) => ({
             id: authenticator.credential_id,
             type: 'public-key',
