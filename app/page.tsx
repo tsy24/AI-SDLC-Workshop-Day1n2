@@ -85,17 +85,17 @@ function SubtaskSection({
     const { completed, total, percent } = calculateProgress(subtasks);
 
     return (
-        <div style={{ marginTop: 8 }}>
+        <div className="subtask-panel" style={{ marginTop: 8 }}>
             {total > 0 ? <div style={{ marginBottom: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280' }}>
                     <span>{completed}/{total} subtasks</span>
                     <span>{percent}%</span>
                 </div>
-                <div style={{ width: '100%', height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
-                    <div style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? '#16a34a' : '#2563eb' }} />
+                <div className="progress-track" style={{ width: '100%', height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                    <div className="progress-fill" style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? '#16a34a' : '#2563eb' }} />
                 </div>
             </div> : null}
-            <button type="button" onClick={onToggleExpanded} style={{ fontSize: 13, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+            <button className="subtask-toggle" type="button" onClick={onToggleExpanded} style={{ fontSize: 13, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 {expanded ? '▼' : '▶'} Subtasks
             </button>
             {expanded ? <div style={{ marginTop: 6, paddingLeft: 16 }}>
@@ -110,7 +110,7 @@ function SubtaskSection({
                         <span style={{ textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? '#9ca3af' : 'inherit', flex: 1 }}>
                             {subtask.title}
                         </span>
-                        <button type="button" onClick={() => onDeleteSubtask(subtask.id)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                        <button className="icon-button danger" type="button" onClick={() => onDeleteSubtask(subtask.id)} aria-label={`Delete subtask ${subtask.title}`} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
                     </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -332,18 +332,26 @@ export default function HomePage() {
     ];
 
     return (
-        <main style={{ maxWidth: 900, padding: 32 }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h1>Todo App</h1>
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="button" onClick={() => void requestPermission()} disabled={permission === 'granted'}>
+        <main className="app-shell" style={{ maxWidth: 900, padding: 32 }}>
+            <header className="app-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                    <p className="eyebrow">Singapore time · Personal command center</p>
+                    <h1>Make room for what matters.</h1>
+                    <p className="header-copy">A calm place to capture, prioritize, and finish today&apos;s work.</p>
+                </div>
+                <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
+                    <button className="secondary-button" type="button" onClick={() => void requestPermission()} disabled={permission === 'granted'}>
                         {permission === 'granted' ? 'Notifications On' : 'Enable Notifications'}
                     </button>
-                    <button type="button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.assign('/login'); }}>Log out</button>
+                    <button className="ghost-button" type="button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.assign('/login'); }}>Log out</button>
                 </div>
             </header>
-            <form onSubmit={createTodo} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, margin: '24px 0' }}>
-                <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a todo" aria-label="Todo title" />
+            <form className="quick-add-card" onSubmit={createTodo} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, margin: '24px 0' }}>
+                <div className="quick-add-heading">
+                    <span className="section-kicker">Quick capture</span>
+                    <strong>What needs your attention?</strong>
+                </div>
+                <input className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a todo" aria-label="Todo title" />
                 <select value={priority} onChange={(event) => setPriority(event.target.value as Priority)} aria-label="Priority">
                     <option value="high">High</option>
                     <option value="medium">Medium</option>
@@ -353,20 +361,26 @@ export default function HomePage() {
                 <label><input type="checkbox" checked={isRecurring} disabled={!dueDate} onChange={(event) => setIsRecurring(event.target.checked)} /> Repeat</label>
                 {isRecurring ? <select value={recurrencePattern} onChange={(event) => setRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
                 <select value={reminderMinutes ?? ''} disabled={!dueDate} onChange={(event) => setReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
-                <button type="submit">Add</button>
+                <button className="primary-button" type="submit">Add task</button>
             </form>
-            <label>Filter priority: <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
-                <option value="all">All priorities</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-            </select></label>
-            {error ? <p role="alert">{error}</p> : null}
+            <div className="list-toolbar">
+                <div>
+                    <span className="section-kicker">Your list</span>
+                    <strong>{todos.filter((todo) => !todo.completed).length} open tasks</strong>
+                </div>
+                <label>Priority <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
+                    <option value="all">All priorities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select></label>
+            </div>
+            {error ? <p className="error-banner" role="alert">{error}</p> : null}
             {sections.map((section) => <section key={section.key} style={{ marginTop: 28 }}>
-                <h2>{section.label} ({section.items.length})</h2>
+                <div className="section-heading"><h2>{section.label}</h2><span>{section.items.length}</span></div>
                 <ul style={{ padding: 0, listStyle: 'none' }}>
-                    {section.items.map((todo) => <li key={todo.id} style={{ borderBottom: '1px solid #ddd', padding: '12px 0' }}>
-                        {editingId === todo.id ? <form onSubmit={saveEdit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {section.items.map((todo) => <li className={`todo-card priority-${todo.priority} ${todo.completed ? 'is-complete' : ''}`} key={todo.id} style={{ borderBottom: '1px solid #ddd', padding: '12px 0' }}>
+                        {editingId === todo.id ? <form className="edit-form" onSubmit={saveEdit} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                             <input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} aria-label="Edit todo title" />
                             <select value={editPriority} onChange={(event) => setEditPriority(event.target.value as Priority)} aria-label="Edit priority">
                                 <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
@@ -376,15 +390,15 @@ export default function HomePage() {
                             {editRecurring ? <select value={editRecurrencePattern} onChange={(event) => setEditRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
                             <select value={editReminderMinutes ?? ''} disabled={!editDueDate} onChange={(event) => setEditReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
                             <button type="submit">Save</button><button type="button" onClick={() => setEditingId(null)}>Cancel</button>
-                        </form> : <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <input type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo)} aria-label={`Complete ${todo.title}`} />
+                        </form> : <div className="todo-row" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <input className="todo-checkbox" type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo)} aria-label={`Complete ${todo.title}`} />
                             <span style={{ textDecoration: todo.completed ? 'line-through' : 'none', flex: 1 }}>{todo.title}</span>
-                            <strong style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
-                            {todo.is_recurring && todo.recurrence_pattern ? <strong>↻ {todo.recurrence_pattern}</strong> : null}
-                            {todo.reminder_minutes ? <strong>Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
-                            <small>{formatDueDate(todo.due_date)}</small>
-                            <button type="button" onClick={() => beginEdit(todo)}>Edit</button>
-                            <button type="button" onClick={() => deleteTodo(todo)}>Delete</button>
+                            <strong className="priority-badge" style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
+                            {todo.is_recurring && todo.recurrence_pattern ? <strong className="meta-badge">↻ {todo.recurrence_pattern}</strong> : null}
+                            {todo.reminder_minutes ? <strong className="meta-badge">Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
+                            <small className="due-date">{formatDueDate(todo.due_date)}</small>
+                            <div className="row-actions"><button className="ghost-button" type="button" onClick={() => beginEdit(todo)}>Edit</button>
+                                <button className="ghost-button danger" type="button" onClick={() => deleteTodo(todo)}>Delete</button></div>
                         </div>}
                         <SubtaskSection
                             todo={todo}

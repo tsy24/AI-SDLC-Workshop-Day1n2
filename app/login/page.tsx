@@ -71,21 +71,25 @@ export default function LoginPage() {
     }
 
     return (
-        <main style={{ maxWidth: 480, margin: '80px auto', padding: 24 }}>
-            <h1>Login</h1>
-            <form onSubmit={handleRegister}>
-                <input
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    placeholder="Username"
-                    style={{ width: '100%', padding: 10, marginBottom: 12 }}
-                />
-                <div style={{ display: 'flex', gap: 8 }}>
-                    <button type="submit">Register with passkey</button>
-                    <button type="button" onClick={handleLogin}>Login with passkey</button>
-                </div>
-            </form>
-            {message ? <p>{message}</p> : null}
+        <main className="auth-shell">
+            <div className="auth-card">
+                <p className="eyebrow">Todo App · Singapore time</p>
+                <h1>Keep your focus close.</h1>
+                <p className="auth-copy">Use a passkey to enter your personal command center. No passwords to remember.</p>
+                <form onSubmit={handleRegister}>
+                    <input
+                        value={username}
+                        onChange={(event) => setUsername(event.target.value)}
+                        placeholder="Username"
+                        style={{ width: '100%', padding: 10, marginBottom: 12 }}
+                    />
+                    <div className="auth-actions" style={{ display: 'flex', gap: 8 }}>
+                        <button className="primary-button" type="submit">Create passkey</button>
+                        <button className="secondary-button" type="button" onClick={handleLogin}>Use existing passkey</button>
+                    </div>
+                </form>
+                {message ? <p className="error-banner" role="alert">{message}</p> : null}
+            </div>
         </main>
     );
 }
