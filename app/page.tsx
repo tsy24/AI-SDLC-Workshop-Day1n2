@@ -536,6 +536,10 @@ export default function HomePage() {
                     <p className="header-copy">A calm place to capture, prioritize, and finish today&apos;s work.</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
+                    <a className="calendar-link" href="/calendar" aria-label="Open calendar month view">
+                        <span className="calendar-link-icon" aria-hidden="true">▦</span>
+                        <span className="calendar-link-copy"><strong>Calendar</strong><small>Month view</small></span>
+                    </a>
                     <button className="secondary-button" type="button" onClick={() => void requestPermission()} disabled={permission === 'granted'}>
                         {permission === 'granted' ? 'Notifications On' : 'Enable Notifications'}
                     </button>
@@ -559,26 +563,26 @@ export default function HomePage() {
                 <select value={reminderMinutes ?? ''} disabled={!dueDate} onChange={(event) => setReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
                 <button className="primary-button" type="submit">Add task</button>
             </form>
-                <div className="list-toolbar">
-                    <div>
-                        <span className="section-kicker">Your list</span>
-                        <strong>{todos.filter((todo) => !todo.completed).length} open tasks</strong>
-                    </div>
-                    <label>Priority <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
-                        <option value="all">All priorities</option>
-                        <option value="high">High</option>
-                        <option value="medium">Medium</option>
-                        <option value="low">Low</option>
-                    </select></label>
+            <div className="list-toolbar">
+                <div>
+                    <span className="section-kicker">Your list</span>
+                    <strong>{todos.filter((todo) => !todo.completed).length} open tasks</strong>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-                    <button type="button" onClick={() => setShowTagModal(true)}>+ Manage Tags</button>
+                <label>Priority <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
+                    <option value="all">All priorities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select></label>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <button type="button" onClick={() => setShowTagModal(true)}>+ Manage Tags</button>
                 {tags.map((tag) => (
                     <TagPill key={tag.id} tag={tag} selected={selectedTagIds.includes(tag.id)} onClick={() => toggleTagSelection(tag.id)} />
                 ))}
             </div>
             {error ? <p className="error-banner" role="alert">{error}</p> : null}
-                {showTagModal ? <ManageTagsModal tags={tags} onClose={() => setShowTagModal(false)} onCreate={createTag} onUpdate={updateTag} onDelete={deleteTag} /> : null}
+            {showTagModal ? <ManageTagsModal tags={tags} onClose={() => setShowTagModal(false)} onCreate={createTag} onUpdate={updateTag} onDelete={deleteTag} /> : null}
             {sections.map((section) => <section key={section.key} style={{ marginTop: 28 }}>
                 <div className="section-heading"><h2>{section.label}</h2><span>{section.items.length}</span></div>
                 <ul style={{ padding: 0, listStyle: 'none' }}>
@@ -601,9 +605,9 @@ export default function HomePage() {
                         </form> : <div className="todo-row" style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input className="todo-checkbox" type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo)} aria-label={`Complete ${todo.title}`} />
                             <span style={{ textDecoration: todo.completed ? 'line-through' : 'none', flex: 1 }}>{todo.title}</span>
-                                <strong className="priority-badge" style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
-                                {todo.is_recurring && todo.recurrence_pattern ? <strong className="meta-badge">↻ {todo.recurrence_pattern}</strong> : null}
-                                {todo.reminder_minutes ? <strong className="meta-badge">Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
+                            <strong className="priority-badge" style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
+                            {todo.is_recurring && todo.recurrence_pattern ? <strong className="meta-badge">↻ {todo.recurrence_pattern}</strong> : null}
+                            {todo.reminder_minutes ? <strong className="meta-badge">Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
                             {(todo.tags ?? []).map((tag) => <TagPill key={tag.id} tag={tag} selected />)}
                             <small className="due-date">{formatDueDate(todo.due_date)}</small>
                             <div className="row-actions"><button className="ghost-button" type="button" onClick={() => beginEdit(todo)}>Edit</button>

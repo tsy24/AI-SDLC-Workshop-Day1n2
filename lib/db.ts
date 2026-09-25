@@ -247,6 +247,7 @@ export interface Holiday {
     id: number;
     date: string;
     name: string;
+    created_at?: string;
 }
 
 export const userDB = {
@@ -535,6 +536,21 @@ export const tagDB = {
             db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)').run(todoId, tagId);
         }
         return this.findByTodoId(todoId, userId);
+    },
+};
+
+export const holidayDB = {
+    findAll() {
+        return db.prepare('SELECT * FROM holidays ORDER BY date ASC').all() as Holiday[];
+    },
+    findByMonth(year: number, month: number) {
+        const start = `${year}-${String(month).padStart(2, '0')}-01`;
+        return db.prepare(`
+            SELECT * FROM holidays
+            WHERE date >= date(?, '-7 days')
+              AND date < date(?, '+1 month', '+14 days')
+            ORDER BY date ASC
+        `).all(start, start) as Holiday[];
     },
 };
 
