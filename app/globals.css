@@ -815,3 +815,29 @@ main.app-shell {
         min-height: 112px;
     }
 }
+
+.export-import-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.import-message {
+    flex-basis: 100%;
+    max-width: 360px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.import-message-success {
+    color: #15803d;
+}
+
+.import-message-error {
+    color: #b91c1c;
+}
+
+.import-message-info {
+    color: #1d4ed8;
+}
