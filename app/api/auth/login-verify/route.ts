@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    if (!response || typeof response.id !== 'string') {
+    if (!response || typeof response !== 'object' || !('id' in response) || typeof response.id !== 'string') {
         return NextResponse.json({ error: 'Authenticator response is required' }, { status: 400 });
     }
     const authenticator = authenticatorDB.findByCredentialId(response.id);

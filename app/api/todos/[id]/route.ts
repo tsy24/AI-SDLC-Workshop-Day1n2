@@ -41,6 +41,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (tagIds !== undefined && (!Array.isArray(tagIds) || tagIds.some((tagId) => !Number.isInteger(tagId) || tagId < 1))) {
         return NextResponse.json({ error: 'tag_ids must be an array of positive integers' }, { status: 400 });
     }
+        if (Array.isArray(tagIds) && tagIds.some((tagId) => !tagDB.findById(tagId, session.userId))) {
+            return NextResponse.json({ error: 'All tags must belong to the current user' }, { status: 400 });
+        }
     const recurring = body.is_recurring === undefined ? existing.is_recurring : parseRecurring(body.is_recurring);
     if (recurring === null) return NextResponse.json({ error: 'is_recurring must be boolean' }, { status: 400 });
     const dueDate = body.due_date === undefined ? existing.due_date : parseOptionalDueDate(body.due_date);

@@ -243,6 +243,38 @@ export interface Template {
     created_at: string;
 }
 
+    export interface TemplateSubtask {
+        title: string;
+        position: number;
+    }
+
+    export interface CreateTemplateInput {
+        user_id: number;
+        name: string;
+        description?: string | null;
+        category?: string | null;
+        title_template: string;
+        priority?: Priority;
+        is_recurring?: boolean;
+        recurrence_pattern?: RecurrencePattern | null;
+        reminder_minutes?: ReminderMinutes | null;
+        due_date_offset_minutes?: number | null;
+        subtasks?: TemplateSubtask[];
+    }
+
+    export interface UpdateTemplateInput {
+        name?: string;
+        description?: string | null;
+        category?: string | null;
+        title_template?: string;
+        priority?: Priority;
+        is_recurring?: boolean;
+        recurrence_pattern?: RecurrencePattern | null;
+        reminder_minutes?: ReminderMinutes | null;
+        due_date_offset_minutes?: number | null;
+        subtasks?: TemplateSubtask[];
+    }
+
 export interface Holiday {
     id: number;
     date: string;
@@ -337,6 +369,16 @@ export const todoDB = {
         });
         return this.findById(Number(result.lastInsertRowid)) as Todo;
     },
+        createWithSubtasks(input: CreateTodoInput, subtasks: TemplateSubtask[]) {
+            return db.transaction(() => {
+                const todo = this.create(input);
+                const createSubtask = db.prepare('INSERT INTO subtasks (todo_id, title, position) VALUES (?, ?, ?)');
+                for (const subtask of subtasks) {
+                    createSubtask.run(todo.id, subtask.title, subtask.position);
+                }
+                return todo;
+            })();
+        },
     findAllByUser(userId: number, priority?: Priority) {
         const query = priority
             ? `SELECT * FROM todos WHERE user_id = ? AND priority = ?
@@ -536,6 +578,75 @@ export const tagDB = {
             db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)').run(todoId, tagId);
         }
         return this.findByTodoId(todoId, userId);
+    },
+};
+
+function mapTemplate(row: Record<string, unknown>): Template {
+    return {
+        ...(row as Omit<Template, 'is_recurring'>),
+        is_recurring: Boolean(row.is_recurring),
+    } as Template;
+}
+
+export const templateDB = {
+    findAllByUser(userId: number) {
+        const rows = db
+            .prepare('SELECT * FROM templates WHERE user_id = ? ORDER BY name COLLATE NOCASE ASC, id ASC')
+            .all(userId) as Record<string, unknown>[];
+        return rows.map(mapTemplate);
+    },
+    findById(id: number, userId: number) {
+        const row = db
+            .prepare('SELECT * FROM templates WHERE id = ? AND user_id = ?')
+            .get(id, userId) as Record<string, unknown> | undefined;
+        return row ? mapTemplate(row) : undefined;
+    },
+    create(input: CreateTemplateInput) {
+        const info = db.prepare(`
+            INSERT INTO templates (
+                user_id, name, description, category, title_template, priority,
+                is_recurring, recurrence_pattern, reminder_minutes, due_date_offset_minutes, subtasks_json
+            ) VALUES (
+                @user_id, @name, @description, @category, @title_template, @priority,
+                @is_recurring, @recurrence_pattern, @reminder_minutes, @due_date_offset_minutes, @subtasks_json
+            )
+        `).run({
+            user_id: input.user_id,
+            name: input.name,
+            description: input.description ?? null,
+            category: input.category ?? null,
+            title_template: input.title_template,
+            priority: input.priority ?? 'medium',
+            is_recurring: input.is_recurring ? 1 : 0,
+            recurrence_pattern: input.recurrence_pattern ?? null,
+            reminder_minutes: input.reminder_minutes ?? null,
+            due_date_offset_minutes: input.due_date_offset_minutes ?? null,
+            subtasks_json: input.subtasks?.length ? JSON.stringify(input.subtasks) : null,
+        });
+        return this.findById(Number(info.lastInsertRowid), input.user_id) as Template;
+    },
+    update(id: number, userId: number, input: UpdateTemplateInput) {
+        const fields: string[] = [];
+        const values: Record<string, string | number | null> = { id, user_id: userId };
+        if (input.name !== undefined) { fields.push('name = @name'); values.name = input.name; }
+        if (input.description !== undefined) { fields.push('description = @description'); values.description = input.description; }
+        if (input.category !== undefined) { fields.push('category = @category'); values.category = input.category; }
+        if (input.title_template !== undefined) { fields.push('title_template = @title_template'); values.title_template = input.title_template; }
+        if (input.priority !== undefined) { fields.push('priority = @priority'); values.priority = input.priority; }
+        if (input.is_recurring !== undefined) { fields.push('is_recurring = @is_recurring'); values.is_recurring = input.is_recurring ? 1 : 0; }
+        if (input.recurrence_pattern !== undefined) { fields.push('recurrence_pattern = @recurrence_pattern'); values.recurrence_pattern = input.recurrence_pattern; }
+        if (input.reminder_minutes !== undefined) { fields.push('reminder_minutes = @reminder_minutes'); values.reminder_minutes = input.reminder_minutes; }
+        if (input.due_date_offset_minutes !== undefined) { fields.push('due_date_offset_minutes = @due_date_offset_minutes'); values.due_date_offset_minutes = input.due_date_offset_minutes; }
+        if (input.subtasks !== undefined) {
+            fields.push('subtasks_json = @subtasks_json');
+            values.subtasks_json = input.subtasks.length ? JSON.stringify(input.subtasks) : null;
+        }
+        if (fields.length === 0) return this.findById(id, userId);
+        db.prepare(`UPDATE templates SET ${fields.join(', ')} WHERE id = @id AND user_id = @user_id`).run(values);
+        return this.findById(id, userId);
+    },
+    delete(id: number, userId: number) {
+        return db.prepare('DELETE FROM templates WHERE id = ? AND user_id = ?').run(id, userId).changes > 0;
     },
 };
 

@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
 
     const id = parseId((await params).id);
     const todo = id ? todoDB.findById(id) : undefined;
-    if (!todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
+    if (id === null || !todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
     return NextResponse.json(tagDB.findByTodoId(id, session.userId));
 }
 
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const id = parseId((await params).id);
     const todo = id ? todoDB.findById(id) : undefined;
-    if (!todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
+    if (id === null || !todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
 
     let body: Record<string, unknown>;
     try {
@@ -47,7 +47,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const id = parseId((await params).id);
     const todo = id ? todoDB.findById(id) : undefined;
-    if (!todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
+    if (id === null || !todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
 
     let body: Record<string, unknown>;
     try {
