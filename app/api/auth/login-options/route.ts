@@ -3,10 +3,13 @@ import { generateAuthenticationOptions } from '@simplewebauthn/server';
 
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
 import { getWebAuthnConfig } from '@/lib/config';
+import { readJsonObject } from '@/lib/request';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
-    const { username } = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    const { username } = body;
     const trimmed = parseUsername(username);
 
     if (!trimmed) {

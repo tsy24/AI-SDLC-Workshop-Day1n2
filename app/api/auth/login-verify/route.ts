@@ -4,10 +4,13 @@ import { verifyAuthenticationResponse } from '@simplewebauthn/server';
 import { createSession } from '@/lib/auth';
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
 import { getWebAuthnConfig } from '@/lib/config';
+import { readJsonObject } from '@/lib/request';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
-    const { username, response } = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    const { username, response } = body;
     const trimmed = parseUsername(username);
 
     if (!trimmed) {
@@ -31,18 +34,23 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Login challenge expired' }, { status: 401 });
     }
     const { rpId, rpOrigin } = getWebAuthnConfig();
-    const verification = await verifyAuthenticationResponse({
-        response,
-        expectedChallenge,
-        expectedOrigin: rpOrigin,
-        expectedRPID: rpId,
-        credential: {
-            id: authenticator.credential_id,
-            publicKey: new Uint8Array(authenticator.credential_public_key) as Uint8Array<ArrayBuffer>,
-            counter: authenticator.counter ?? 0,
-            transports: undefined,
-        },
-    });
+    let verification;
+    try {
+        verification = await verifyAuthenticationResponse({
+            response: response as Parameters<typeof verifyAuthenticationResponse>[0]['response'],
+            expectedChallenge,
+            expectedOrigin: rpOrigin,
+            expectedRPID: rpId,
+            credential: {
+                id: authenticator.credential_id,
+                publicKey: new Uint8Array(authenticator.credential_public_key) as Uint8Array<ArrayBuffer>,
+                counter: authenticator.counter ?? 0,
+                transports: undefined,
+            },
+        });
+    } catch {
+        return NextResponse.json({ error: 'Login verification failed' }, { status: 401 });
+    }
     if (!verification.verified) {
         return NextResponse.json({ error: 'Login verification failed' }, { status: 401 });
     }

@@ -4,10 +4,13 @@ import { verifyRegistrationResponse } from '@simplewebauthn/server';
 import { createSession } from '@/lib/auth';
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
 import { getWebAuthnConfig } from '@/lib/config';
+import { readJsonObject } from '@/lib/request';
 import { parseUsername } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
-    const { username, response } = await request.json();
+    const body = await readJsonObject(request);
+    if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    const { username, response } = body;
     const trimmed = parseUsername(username);
 
     if (!trimmed) {
@@ -24,12 +27,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { rpId, rpOrigin } = getWebAuthnConfig();
-    const verification = await verifyRegistrationResponse({
-        response,
-        expectedChallenge,
-        expectedOrigin: rpOrigin,
-        expectedRPID: rpId,
-    });
+    let verification;
+    try {
+        verification = await verifyRegistrationResponse({
+            response: response as Parameters<typeof verifyRegistrationResponse>[0]['response'],
+            expectedChallenge,
+            expectedOrigin: rpOrigin,
+            expectedRPID: rpId,
+        });
+    } catch {
+        return NextResponse.json({ error: 'Registration verification failed' }, { status: 401 });
+    }
     if (!verification.verified || !verification.registrationInfo) {
         return NextResponse.json({ error: 'Registration verification failed' }, { status: 401 });
     }

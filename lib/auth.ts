@@ -16,7 +16,8 @@ const SESSION_COOKIE = 'session';
 function getJwtSecret(): Uint8Array {
     const configuredSecret = process.env.JWT_SECRET;
     const requiresProductionConfig = process.env.NODE_ENV !== 'development' && process.env.NODE_ENV !== 'test';
-    if (requiresProductionConfig && (!configuredSecret || configuredSecret.length < 32 || configuredSecret === 'replace-with-a-long-random-secret' || configuredSecret === 'dev-secret-change-me')) {
+    const isPlaceholder = configuredSecret === 'replace-with-a-long-random-secret' || configuredSecret === 'dev-secret-change-me';
+    if (isPlaceholder || (requiresProductionConfig && (!configuredSecret || configuredSecret.length < 32))) {
         throw new Error('JWT_SECRET must be a unique random secret of at least 32 characters');
     }
     return new TextEncoder().encode(configuredSecret ?? 'dev-secret-change-me');
