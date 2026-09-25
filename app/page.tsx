@@ -1,6 +1,8 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import type { Subtask } from '@/lib/db';
+import { calculateProgress } from '@/lib/subtasks';
 import { formatSingaporeDate, parseSingaporeDate } from '@/lib/timezone';
 import { useNotifications } from '@/lib/hooks/useNotifications';
 
@@ -57,6 +59,76 @@ function formatDueDate(value: string | null): string {
     return value ? formatSingaporeDate(value, 'yyyy-MM-dd HH:mm') : 'No due date';
 }
 
+interface SubtaskSectionProps {
+    todo: Todo;
+    subtasks: Subtask[];
+    expanded: boolean;
+    newTitle: string;
+    onToggleExpanded: () => void;
+    onNewTitleChange: (value: string) => void;
+    onAdd: () => void;
+    onToggleSubtask: (subtask: Subtask) => void;
+    onDeleteSubtask: (subtaskId: number) => void;
+}
+
+function SubtaskSection({
+    todo,
+    subtasks,
+    expanded,
+    newTitle,
+    onToggleExpanded,
+    onNewTitleChange,
+    onAdd,
+    onToggleSubtask,
+    onDeleteSubtask,
+}: SubtaskSectionProps) {
+    const { completed, total, percent } = calculateProgress(subtasks);
+
+    return (
+        <div style={{ marginTop: 8 }}>
+            {total > 0 ? <div style={{ marginBottom: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6b7280' }}>
+                    <span>{completed}/{total} subtasks</span>
+                    <span>{percent}%</span>
+                </div>
+                <div style={{ width: '100%', height: 6, background: '#e5e7eb', borderRadius: 4, overflow: 'hidden' }}>
+                    <div style={{ width: `${percent}%`, height: '100%', background: percent === 100 ? '#16a34a' : '#2563eb' }} />
+                </div>
+            </div> : null}
+            <button type="button" onClick={onToggleExpanded} style={{ fontSize: 13, color: '#6b7280', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                {expanded ? '▼' : '▶'} Subtasks
+            </button>
+            {expanded ? <div style={{ marginTop: 6, paddingLeft: 16 }}>
+                {subtasks.map((subtask) => (
+                    <div key={subtask.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0' }}>
+                        <input
+                            type="checkbox"
+                            checked={subtask.completed}
+                            onChange={() => onToggleSubtask(subtask)}
+                            aria-label={`Complete subtask ${subtask.title}`}
+                        />
+                        <span style={{ textDecoration: subtask.completed ? 'line-through' : 'none', color: subtask.completed ? '#9ca3af' : 'inherit', flex: 1 }}>
+                            {subtask.title}
+                        </span>
+                        <button type="button" onClick={() => onDeleteSubtask(subtask.id)} style={{ color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>✕</button>
+                    </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                    <input
+                        type="text"
+                        value={newTitle}
+                        onChange={(event) => onNewTitleChange(event.target.value)}
+                        onKeyDown={(event) => { if (event.key === 'Enter') onAdd(); }}
+                        placeholder="Add subtask..."
+                        aria-label={`Add subtask to ${todo.title}`}
+                    />
+                    <button type="button" onClick={onAdd}>Add</button>
+                </div>
+            </div> : null}
+        </div>
+    );
+}
+
 export default function HomePage() {
     const { permission, requestPermission } = useNotifications();
     const [todos, setTodos] = useState<Todo[]>([]);
@@ -75,6 +147,9 @@ export default function HomePage() {
     const [editRecurrencePattern, setEditRecurrencePattern] = useState<RecurrencePattern>('daily');
     const [editReminderMinutes, setEditReminderMinutes] = useState<ReminderMinutes | null>(null);
     const [error, setError] = useState('');
+    const [subtasksByTodo, setSubtasksByTodo] = useState<Record<number, Subtask[]>>({});
+    const [expandedSubtasks, setExpandedSubtasks] = useState<Record<number, boolean>>({});
+    const [newSubtaskTitle, setNewSubtaskTitle] = useState<Record<number, string>>({});
 
     useEffect(() => {
         loadTodos();
@@ -83,11 +158,80 @@ export default function HomePage() {
     async function loadTodos() {
         try {
             const response = await fetch('/api/todos');
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error ?? 'Unable to load todos');
-            setTodos(payload);
+            const payload = (await response.json()) as Todo[] | { error: string };
+            if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to load todos');
+            const loadedTodos = payload as Todo[];
+            setTodos(loadedTodos);
+            // preload so progress bars are visible even before a checklist is expanded
+            await Promise.all(loadedTodos.map((todo) => loadSubtasks(todo.id)));
         } catch (loadError) {
             setError(loadError instanceof Error ? loadError.message : 'Unable to load todos');
+        }
+    }
+
+    async function loadSubtasks(todoId: number) {
+        try {
+            const response = await fetch(`/api/todos/${todoId}/subtasks`);
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to load subtasks');
+            setSubtasksByTodo((current) => ({ ...current, [todoId]: payload }));
+        } catch (loadError) {
+            setError(loadError instanceof Error ? loadError.message : 'Unable to load subtasks');
+        }
+    }
+
+    function toggleSubtasksExpanded(todoId: number) {
+        setExpandedSubtasks((current) => ({ ...current, [todoId]: !current[todoId] }));
+    }
+
+    async function addSubtask(todoId: number) {
+        const title = (newSubtaskTitle[todoId] ?? '').trim();
+        if (!title) return;
+        try {
+            const response = await fetch(`/api/todos/${todoId}/subtasks`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to add subtask');
+            setSubtasksByTodo((current) => ({ ...current, [todoId]: [...(current[todoId] ?? []), payload] }));
+            setNewSubtaskTitle((current) => ({ ...current, [todoId]: '' }));
+        } catch (addError) {
+            setError(addError instanceof Error ? addError.message : 'Unable to add subtask');
+        }
+    }
+
+    async function toggleSubtask(todoId: number, subtask: Subtask) {
+        const previous = subtasksByTodo[todoId] ?? [];
+        const optimistic = previous.map((item) => item.id === subtask.id ? { ...item, completed: !item.completed } : item);
+        setSubtasksByTodo((current) => ({ ...current, [todoId]: optimistic }));
+        try {
+            const response = await fetch(`/api/subtasks/${subtask.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ completed: !subtask.completed }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to update subtask');
+        } catch (toggleError) {
+            setSubtasksByTodo((current) => ({ ...current, [todoId]: previous }));
+            setError(toggleError instanceof Error ? toggleError.message : 'Unable to update subtask');
+        }
+    }
+
+    async function deleteSubtask(todoId: number, subtaskId: number) {
+        const previous = subtasksByTodo[todoId] ?? [];
+        setSubtasksByTodo((current) => ({ ...current, [todoId]: previous.filter((item) => item.id !== subtaskId) }));
+        try {
+            const response = await fetch(`/api/subtasks/${subtaskId}`, { method: 'DELETE' });
+            if (!response.ok) {
+                const payload = await response.json();
+                throw new Error(payload.error ?? 'Unable to delete subtask');
+            }
+        } catch (deleteError) {
+            setSubtasksByTodo((current) => ({ ...current, [todoId]: previous }));
+            setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete subtask');
         }
     }
 
@@ -171,6 +315,9 @@ export default function HomePage() {
                 const payload = await response.json();
                 throw new Error(payload.error ?? 'Unable to delete todo');
             }
+            setSubtasksByTodo((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
+            setExpandedSubtasks((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
+            setNewSubtaskTitle((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
         } catch (deleteError) {
             setTodos(previousTodos);
             setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete todo');
@@ -239,6 +386,17 @@ export default function HomePage() {
                             <button type="button" onClick={() => beginEdit(todo)}>Edit</button>
                             <button type="button" onClick={() => deleteTodo(todo)}>Delete</button>
                         </div>}
+                        <SubtaskSection
+                            todo={todo}
+                            subtasks={subtasksByTodo[todo.id] ?? []}
+                            expanded={Boolean(expandedSubtasks[todo.id])}
+                            newTitle={newSubtaskTitle[todo.id] ?? ''}
+                            onToggleExpanded={() => toggleSubtasksExpanded(todo.id)}
+                            onNewTitleChange={(value) => setNewSubtaskTitle((current) => ({ ...current, [todo.id]: value }))}
+                            onAdd={() => addSubtask(todo.id)}
+                            onToggleSubtask={(subtask) => toggleSubtask(todo.id, subtask)}
+                            onDeleteSubtask={(subtaskId) => deleteSubtask(todo.id, subtaskId)}
+                        />
                     </li>)}
                 </ul>
             </section>)}
