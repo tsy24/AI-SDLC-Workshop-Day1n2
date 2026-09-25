@@ -5,7 +5,7 @@ import Database from 'better-sqlite3';
 
 import type { ImportResult, TodoWithRelations, ValidatedTodoExportItem } from './export-import';
 
-const dbPath = path.join(process.cwd(), 'todos.db');
+const dbPath = process.env.SQLITE_DB_PATH ?? path.join(process.cwd(), 'todos.db');
 
 if (!fs.existsSync(dbPath)) {
     fs.writeFileSync(dbPath, '');

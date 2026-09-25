@@ -1,0 +1,17 @@
+node_modules
+.next
+out
+test-results
+playwright-report
+coverage
+.git
+.github
+.claude
+*.log
+.env.*
+!.env.example
+todos.db
+todos.db-shm
+todos.db-wal
+Dockerfile
+docker-compose.yml
