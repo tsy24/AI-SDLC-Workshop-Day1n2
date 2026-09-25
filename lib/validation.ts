@@ -1,4 +1,4 @@
-import type { Priority } from '@/lib/db';
+import type { Priority, RecurrencePattern, ReminderMinutes } from '@/lib/db';
 import { parseSingaporeDate } from '@/lib/timezone';
 
 const priorities: Priority[] = ['high', 'medium', 'low'];
@@ -21,11 +21,31 @@ export function parsePriority(value: unknown): Priority | null {
         : null;
 }
 
+export function parseRecurrencePattern(value: unknown): RecurrencePattern | null {
+    return value === 'daily' || value === 'weekly' || value === 'monthly' || value === 'yearly'
+        ? value
+        : null;
+}
+
+export function parseRecurring(value: unknown): boolean | null {
+    return value === undefined ? false : typeof value === 'boolean' ? value : null;
+}
+
+export function parseReminderMinutes(value: unknown): ReminderMinutes | null | undefined {
+    if (value === undefined || value === null || value === '') return null;
+    return [15, 30, 60, 120, 1440, 2880, 10080].includes(value as number)
+        ? value as ReminderMinutes
+        : undefined;
+}
+
 export function parseOptionalDueDate(value: unknown): string | null | undefined {
     if (value === undefined || value === null || value === '') return null;
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return undefined;
     const date = parseSingaporeDate(value);
-    return Number.isNaN(date.getTime()) ? undefined : value;
+    if (Number.isNaN(date.getTime())) return undefined;
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(value)
+        ? `${value.length === 16 ? `${value}:00` : value}+08:00`
+        : value;
 }
 
 export function isDueDateAtLeastOneMinuteAway(value: string | null): boolean {

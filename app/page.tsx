@@ -2,8 +2,11 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { formatSingaporeDate, parseSingaporeDate } from '@/lib/timezone';
+import { useNotifications } from '@/lib/hooks/useNotifications';
 
 type Priority = 'high' | 'medium' | 'low';
+type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+type ReminderMinutes = 15 | 30 | 60 | 120 | 1440 | 2880 | 10080;
 
 interface Todo {
     id: number;
@@ -11,6 +14,9 @@ interface Todo {
     completed: boolean;
     priority: Priority;
     due_date: string | null;
+    is_recurring: boolean;
+    recurrence_pattern: RecurrencePattern | null;
+    reminder_minutes: ReminderMinutes | null;
     created_at: string;
 }
 
@@ -21,6 +27,7 @@ const priorityColors: Record<Priority, string> = {
     medium: '#a16207',
     low: '#1d4ed8',
 };
+const reminderLabels: Record<ReminderMinutes, string> = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 1440: '1d', 2880: '2d', 10080: '1w' };
 
 function sortTodos(todos: Todo[]): Todo[] {
     return [...todos].sort((first, second) => {
@@ -43,7 +50,7 @@ function sortTodos(todos: Todo[]): Todo[] {
 }
 
 function isOverdue(todo: Todo): boolean {
-    return !todo.completed && Boolean(todo.due_date && new Date(todo.due_date).getTime() < Date.now());
+    return !todo.completed && Boolean(todo.due_date && parseSingaporeDate(todo.due_date).getTime() < Date.now());
 }
 
 function formatDueDate(value: string | null): string {
@@ -51,15 +58,22 @@ function formatDueDate(value: string | null): string {
 }
 
 export default function HomePage() {
+    const { permission, requestPermission } = useNotifications();
     const [todos, setTodos] = useState<Todo[]>([]);
     const [title, setTitle] = useState('');
     const [priority, setPriority] = useState<Priority>('medium');
     const [dueDate, setDueDate] = useState('');
+    const [isRecurring, setIsRecurring] = useState(false);
+    const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePattern>('daily');
+    const [reminderMinutes, setReminderMinutes] = useState<ReminderMinutes | null>(null);
     const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editTitle, setEditTitle] = useState('');
     const [editPriority, setEditPriority] = useState<Priority>('medium');
     const [editDueDate, setEditDueDate] = useState('');
+    const [editRecurring, setEditRecurring] = useState(false);
+    const [editRecurrencePattern, setEditRecurrencePattern] = useState<RecurrencePattern>('daily');
+    const [editReminderMinutes, setEditReminderMinutes] = useState<ReminderMinutes | null>(null);
     const [error, setError] = useState('');
 
     useEffect(() => {
@@ -84,7 +98,7 @@ export default function HomePage() {
             const response = await fetch('/api/todos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, priority, due_date: dueDate || null }),
+                body: JSON.stringify({ title, priority, due_date: dueDate || null, is_recurring: isRecurring, recurrence_pattern: recurrencePattern, reminder_minutes: reminderMinutes }),
             });
             const todo = await response.json();
             if (!response.ok) throw new Error(todo.error ?? 'Unable to create todo');
@@ -92,6 +106,8 @@ export default function HomePage() {
             setTitle('');
             setDueDate('');
             setPriority('medium');
+            setIsRecurring(false);
+            setReminderMinutes(null);
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create todo');
         }
@@ -102,6 +118,9 @@ export default function HomePage() {
         setEditTitle(todo.title);
         setEditPriority(todo.priority);
         setEditDueDate(todo.due_date ? formatSingaporeDate(todo.due_date, 'yyyy-MM-ddTHH:mm') : '');
+        setEditRecurring(todo.is_recurring);
+        setEditRecurrencePattern(todo.recurrence_pattern ?? 'daily');
+        setEditReminderMinutes(todo.reminder_minutes);
     }
 
     async function saveEdit(event: FormEvent<HTMLFormElement>) {
@@ -111,10 +130,11 @@ export default function HomePage() {
             const response = await fetch(`/api/todos/${editingId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: editTitle, priority: editPriority, due_date: editDueDate || null }),
+                body: JSON.stringify({ title: editTitle, priority: editPriority, due_date: editDueDate || null, is_recurring: editRecurring, recurrence_pattern: editRecurrencePattern, reminder_minutes: editReminderMinutes }),
             });
-            const todo = await response.json();
-            if (!response.ok) throw new Error(todo.error ?? 'Unable to update todo');
+            const payload = await response.json() as Todo | { todo: Todo; nextInstance?: Todo };
+            if (!response.ok) throw new Error('Unable to update todo');
+            const todo = 'todo' in payload ? payload.todo : payload;
             setTodos((current) => sortTodos(current.map((item) => item.id === todo.id ? todo : item)));
             setEditingId(null);
         } catch (updateError) {
@@ -131,8 +151,11 @@ export default function HomePage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ completed: updated.completed }),
             });
-            const payload = await response.json();
-            if (!response.ok) throw new Error(payload.error ?? 'Unable to update todo');
+            const payload = await response.json() as Todo | { todo: Todo; nextInstance?: Todo };
+            if (!response.ok) throw new Error('Unable to update todo');
+            const updatedTodo = 'todo' in payload ? payload.todo : payload;
+            const nextInstance = 'nextInstance' in payload ? payload.nextInstance : undefined;
+            setTodos((current) => sortTodos([...current.map((item) => item.id === todo.id ? updatedTodo : item), ...(nextInstance ? [nextInstance] : [])]));
         } catch (toggleError) {
             setTodos((current) => current.map((item) => item.id === todo.id ? todo : item));
             setError(toggleError instanceof Error ? toggleError.message : 'Unable to update todo');
@@ -165,7 +188,12 @@ export default function HomePage() {
         <main style={{ maxWidth: 900, padding: 32 }}>
             <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h1>Todo App</h1>
-                <button type="button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.assign('/login'); }}>Log out</button>
+                <div style={{ display: 'flex', gap: 8 }}>
+                    <button type="button" onClick={() => void requestPermission()} disabled={permission === 'granted'}>
+                        {permission === 'granted' ? 'Notifications On' : 'Enable Notifications'}
+                    </button>
+                    <button type="button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.assign('/login'); }}>Log out</button>
+                </div>
             </header>
             <form onSubmit={createTodo} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, margin: '24px 0' }}>
                 <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Add a todo" aria-label="Todo title" />
@@ -174,7 +202,10 @@ export default function HomePage() {
                     <option value="medium">Medium</option>
                     <option value="low">Low</option>
                 </select>
-                <input type="datetime-local" value={dueDate} onChange={(event) => setDueDate(event.target.value)} aria-label="Due date" />
+                <input type="datetime-local" value={dueDate} onChange={(event) => { const value = event.target.value; setDueDate(value); if (!value) { setIsRecurring(false); setReminderMinutes(null); } }} aria-label="Due date" />
+                <label><input type="checkbox" checked={isRecurring} disabled={!dueDate} onChange={(event) => setIsRecurring(event.target.checked)} /> Repeat</label>
+                {isRecurring ? <select value={recurrencePattern} onChange={(event) => setRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
+                <select value={reminderMinutes ?? ''} disabled={!dueDate} onChange={(event) => setReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
                 <button type="submit">Add</button>
             </form>
             <label>Filter priority: <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
@@ -194,11 +225,16 @@ export default function HomePage() {
                                 <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
                             </select>
                             <input type="datetime-local" value={editDueDate} onChange={(event) => setEditDueDate(event.target.value)} aria-label="Edit due date" />
+                            <label><input type="checkbox" checked={editRecurring} disabled={!editDueDate} onChange={(event) => setEditRecurring(event.target.checked)} /> Repeat</label>
+                            {editRecurring ? <select value={editRecurrencePattern} onChange={(event) => setEditRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
+                            <select value={editReminderMinutes ?? ''} disabled={!editDueDate} onChange={(event) => setEditReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
                             <button type="submit">Save</button><button type="button" onClick={() => setEditingId(null)}>Cancel</button>
                         </form> : <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo)} aria-label={`Complete ${todo.title}`} />
                             <span style={{ textDecoration: todo.completed ? 'line-through' : 'none', flex: 1 }}>{todo.title}</span>
                             <strong style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
+                            {todo.is_recurring && todo.recurrence_pattern ? <strong>↻ {todo.recurrence_pattern}</strong> : null}
+                            {todo.reminder_minutes ? <strong>Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
                             <small>{formatDueDate(todo.due_date)}</small>
                             <button type="button" onClick={() => beginEdit(todo)}>Edit</button>
                             <button type="button" onClick={() => deleteTodo(todo)}>Delete</button>

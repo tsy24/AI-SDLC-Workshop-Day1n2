@@ -48,6 +48,8 @@ Dependencies: none for the foundation; all later work depends on this phase.
 Dependencies: Phase 0 first; features 01 + 02 are the first real application work.
 
 #### Phase 2 — Recurring and reminders (Engineer 2)
+**Status: Implemented.** Tests and build execution are intentionally deferred by request.
+
 1. Add recurrence validation and the next-instance creation logic on completion.
 2. Implement reminder storage and the notification polling endpoint.
 3. Wire reminder badges and permission handling for the browser notifications flow.

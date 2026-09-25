@@ -108,11 +108,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_templates_user_id ON templates(user_id);
 `);
 
+const todoColumns = new Set(
+    (db.prepare('PRAGMA table_info(todos)').all() as Array<{ name: string }>).map((column) => column.name),
+);
+const todoMigrations: Array<[string, string]> = [
+    ['is_recurring', 'ALTER TABLE todos ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 0'],
+    ['recurrence_pattern', 'ALTER TABLE todos ADD COLUMN recurrence_pattern TEXT'],
+    ['reminder_minutes', 'ALTER TABLE todos ADD COLUMN reminder_minutes INTEGER'],
+    ['last_notification_sent', 'ALTER TABLE todos ADD COLUMN last_notification_sent TEXT'],
+];
+for (const [column, statement] of todoMigrations) {
+    if (!todoColumns.has(column)) db.exec(statement);
+}
+
 export type Priority = 'high' | 'medium' | 'low';
 export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type ReminderMinutes = 15 | 30 | 60 | 120 | 1440 | 2880 | 10080;
 
 export const PRIORITY_VALUES: Priority[] = ['high', 'medium', 'low'];
 export const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
+export const RECURRENCE_VALUES: RecurrencePattern[] = ['daily', 'weekly', 'monthly', 'yearly'];
+export const REMINDER_VALUES: ReminderMinutes[] = [15, 30, 60, 120, 1440, 2880, 10080];
+export const REMINDER_LABELS: Record<ReminderMinutes, string> = {
+    15: '15m', 30: '30m', 60: '1h', 120: '2h', 1440: '1d', 2880: '2d', 10080: '1w',
+};
 
 export interface User {
     id: number;
@@ -156,6 +175,9 @@ export interface CreateTodoInput {
     title: string;
     due_date?: string | null;
     priority?: Priority;
+    is_recurring?: boolean;
+    recurrence_pattern?: RecurrencePattern | null;
+    reminder_minutes?: ReminderMinutes | null;
 }
 
 export interface UpdateTodoInput {
@@ -163,6 +185,10 @@ export interface UpdateTodoInput {
     due_date?: string | null;
     priority?: Priority;
     completed?: boolean;
+    is_recurring?: boolean;
+    recurrence_pattern?: RecurrencePattern | null;
+    reminder_minutes?: ReminderMinutes | null;
+    last_notification_sent?: string | null;
 }
 
 export interface Subtask {
@@ -271,19 +297,23 @@ function mapTodo(row: Record<string, unknown>): Todo {
     return {
         ...(row as Omit<Todo, 'completed'>),
         completed: Boolean(row.completed),
+        is_recurring: Boolean(row.is_recurring),
     } as Todo;
 }
 
 export const todoDB = {
     create(input: CreateTodoInput) {
         const result = db.prepare(`
-      INSERT INTO todos (user_id, title, due_date, priority)
-      VALUES (@user_id, @title, @due_date, @priority)
+        INSERT INTO todos (user_id, title, due_date, priority, is_recurring, recurrence_pattern, reminder_minutes)
+    VALUES (@user_id, @title, @due_date, @priority, @is_recurring, @recurrence_pattern, @reminder_minutes)
     `).run({
             user_id: input.user_id,
             title: input.title,
             due_date: input.due_date ?? null,
             priority: input.priority ?? 'medium',
+            is_recurring: input.is_recurring ? 1 : 0,
+            recurrence_pattern: input.recurrence_pattern ?? null,
+            reminder_minutes: input.reminder_minutes ?? null,
         });
         return this.findById(Number(result.lastInsertRowid)) as Todo;
     },
@@ -315,6 +345,13 @@ export const todoDB = {
         if (input.due_date !== undefined) { fields.push('due_date = @due_date'); values.due_date = input.due_date; }
         if (input.priority !== undefined) { fields.push('priority = @priority'); values.priority = input.priority; }
         if (input.completed !== undefined) { fields.push('completed = @completed'); values.completed = input.completed ? 1 : 0; }
+        if (input.is_recurring !== undefined) { fields.push('is_recurring = @is_recurring'); values.is_recurring = input.is_recurring ? 1 : 0; }
+        if (input.recurrence_pattern !== undefined) { fields.push('recurrence_pattern = @recurrence_pattern'); values.recurrence_pattern = input.recurrence_pattern; }
+        if (input.reminder_minutes !== undefined) { fields.push('reminder_minutes = @reminder_minutes'); values.reminder_minutes = input.reminder_minutes; }
+        if (input.last_notification_sent !== undefined) { fields.push('last_notification_sent = @last_notification_sent'); values.last_notification_sent = input.last_notification_sent; }
+        if ((input.due_date !== undefined || input.reminder_minutes !== undefined) && input.last_notification_sent === undefined) {
+            fields.push('last_notification_sent = NULL');
+        }
         if (fields.length === 0) return this.findById(id);
         fields.push("updated_at = datetime('now')");
         db.prepare(`UPDATE todos SET ${fields.join(', ')} WHERE id = @id`).run(values);
@@ -322,6 +359,45 @@ export const todoDB = {
     },
     delete(id: number) {
         db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+    },
+    completeAndCreateNext(id: number, update: UpdateTodoInput, nextDueDate: string) {
+        return db.transaction(() => {
+            const updated = this.update(id, update);
+            if (!updated) return null;
+            const nextInstance = this.create({
+                user_id: updated.user_id,
+                title: updated.title,
+                due_date: nextDueDate,
+                priority: updated.priority,
+                is_recurring: true,
+                recurrence_pattern: updated.recurrence_pattern,
+                reminder_minutes: updated.reminder_minutes as ReminderMinutes | null,
+            });
+            db.prepare(`
+                INSERT INTO todo_tags (todo_id, tag_id)
+                SELECT ?, tag_id FROM todo_tags WHERE todo_id = ?
+            `).run(nextInstance.id, id);
+            return { todo: updated, nextInstance };
+        })();
+    },
+    findDueReminders(userId: number, now: string) {
+        const rows = db.prepare(`
+            SELECT * FROM todos
+            WHERE user_id = ?
+              AND completed = 0
+              AND due_date IS NOT NULL
+              AND reminder_minutes IS NOT NULL
+              AND last_notification_sent IS NULL
+              AND datetime(due_date, '-' || reminder_minutes || ' minutes') <= datetime(?)
+              AND datetime(?) <= datetime(due_date)
+          `).all(userId, now, now) as Record<string, unknown>[];
+        return rows.map(mapTodo);
+    },
+    markNotificationSent(id: number, userId: number, timestamp: string) {
+        return db.prepare(`
+            UPDATE todos SET last_notification_sent = ?
+            WHERE id = ? AND user_id = ? AND completed = 0 AND last_notification_sent IS NULL
+        `).run(timestamp, id, userId).changes > 0;
     },
 };
 
