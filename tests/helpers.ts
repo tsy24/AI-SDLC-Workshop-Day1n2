@@ -1,6 +1,6 @@
 import { expect, type BrowserContext, type Page } from '@playwright/test';
 
-export async function registerTestUser(page: Page, context: BrowserContext, prefix: string): Promise<void> {
+export async function registerTestUser(page: Page, context: BrowserContext, prefix: string): Promise<string> {
     const cdp = await context.newCDPSession(page);
     await cdp.send('WebAuthn.enable');
     await cdp.send('WebAuthn.addVirtualAuthenticator', {
@@ -15,9 +15,11 @@ export async function registerTestUser(page: Page, context: BrowserContext, pref
     });
 
     await page.goto('/login');
-    await page.getByPlaceholder('Username').fill(`${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`);
+    const username = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    await page.getByPlaceholder('Username').fill(username);
     await page.getByRole('button', { name: 'Create passkey' }).click();
     await page.waitForURL('**/');
+    return username;
 }
 
 export function singaporeDateTime(minutesFromNow: number): string {

@@ -5,7 +5,7 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "test": "tsx --test",
+        "test": "tsx scripts/run-tests.ts",
         "test:e2e": "playwright test",
         "seed:holidays": "tsx scripts/seed-holidays.ts"
     },

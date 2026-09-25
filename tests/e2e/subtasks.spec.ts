@@ -17,9 +17,13 @@ test.describe('Subtasks and progress', () => {
 
         const firstInput = todo.getByLabel(`Add subtask to ${title}`);
         await firstInput.fill('First subtask');
+        const firstResponse = page.waitForResponse((response) => response.url().includes('/api/todos/') && response.url().endsWith('/subtasks') && response.request().method() === 'POST');
         await todo.getByRole('button', { name: 'Add' }).click();
+        await expect((await firstResponse).ok()).toBe(true);
         await firstInput.fill('Second subtask');
+        const secondResponse = page.waitForResponse((response) => response.url().includes('/api/todos/') && response.url().endsWith('/subtasks') && response.request().method() === 'POST');
         await todo.getByRole('button', { name: 'Add' }).click();
+        await expect((await secondResponse).ok()).toBe(true);
 
         await expect(todo).toContainText('0/2 subtasks');
         await expect(todo).toContainText('0%');
@@ -41,7 +45,9 @@ test.describe('Subtasks and progress', () => {
         const todo = page.locator('li.todo-card', { hasText: title });
         await todo.getByRole('button', { name: /Subtasks/ }).click();
         await todo.getByLabel(`Add subtask to ${title}`).fill('Cascade subtask');
+        const response = page.waitForResponse((item) => item.url().includes('/api/todos/') && item.url().endsWith('/subtasks') && item.request().method() === 'POST');
         await todo.getByRole('button', { name: 'Add' }).click();
+        await expect((await response).ok()).toBe(true);
         await expect(todo).toContainText('Cascade subtask');
 
         page.once('dialog', (dialog) => dialog.accept());
