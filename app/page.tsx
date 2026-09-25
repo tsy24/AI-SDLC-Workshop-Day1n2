@@ -2,6 +2,18 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import type { Subtask, Tag } from '@/lib/db';
+import {
+    applyFilters,
+    createPreset,
+    DEFAULT_FILTER_STATE,
+    deletePreset as deleteStoredPreset,
+    hasActiveFilters,
+    loadPresets,
+    savePreset,
+    type FilterPreset,
+    type FilterState,
+} from '@/lib/filters';
+import { useDebounce } from '@/lib/hooks/useDebounce';
 import { calculateProgress } from '@/lib/subtasks';
 import { formatSingaporeDate, parseSingaporeDate } from '@/lib/timezone';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -229,6 +241,73 @@ function ManageTagsModal({
         );
     }
 
+function SearchBar({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+    return (
+        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+            <input
+                type="text"
+                value={value}
+                onChange={(event) => onChange(event.target.value)}
+                placeholder="Search todos and subtasks..."
+                aria-label="Search todos and subtasks"
+                style={{ width: '100%', padding: '8px 32px 8px 10px' }}
+            />
+            {value ? <button type="button" onClick={() => onChange('')} aria-label="Clear search" style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280' }}>✕</button> : null}
+        </div>
+    );
+}
+
+function AdvancedToggle({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={onToggle}
+            style={{ padding: '6px 12px', borderRadius: 8, fontSize: 13, fontWeight: 600, border: 'none', cursor: 'pointer', background: expanded ? '#2563eb' : '#f3f4f6', color: expanded ? '#fff' : '#374151' }}
+        >
+            {expanded ? '▼ Advanced' : '▶ Advanced'}
+        </button>
+    );
+}
+
+function SavedPresetPill({ preset, onApply, onDelete }: { preset: FilterPreset; onApply: (filters: FilterState) => void; onDelete: (id: string) => void }) {
+    return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 999, border: '1px solid #d1d5db', padding: '4px 10px', fontSize: 13 }}>
+            <button type="button" onClick={() => onApply(preset.filters)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>{preset.name}</button>
+            <button type="button" onClick={() => onDelete(preset.id)} aria-label={`Delete preset ${preset.name}`} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>✕</button>
+        </span>
+    );
+}
+
+function FilterActions({ visible, onClearAll, onSaveFilter }: { visible: boolean; onClearAll: () => void; onSaveFilter: () => void }) {
+    if (!visible) return null;
+    return (
+        <div style={{ display: 'flex', gap: 12 }}>
+            <button type="button" onClick={onClearAll} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontWeight: 600, fontSize: 13 }}>Clear All</button>
+            <button type="button" onClick={onSaveFilter} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#16a34a', fontWeight: 600, fontSize: 13 }}>💾 Save Filter</button>
+        </div>
+    );
+}
+
+function SavePresetModal({ summary, onClose, onSave }: { summary: string; onClose: () => void; onSave: (name: string) => void }) {
+    const [name, setName] = useState('');
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+            <form onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSave(name.trim()); }} style={{ background: '#fff', width: 420, maxWidth: '90vw', borderRadius: 12, padding: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.2)', display: 'grid', gap: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <h2 style={{ margin: 0 }}>Save Filter</h2>
+                    <button type="button" onClick={onClose}>Close</button>
+                </div>
+                <p style={{ margin: 0, color: '#4b5563', fontSize: 13 }}>{summary}</p>
+                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Preset name" aria-label="Preset name" required />
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                    <button type="button" onClick={onClose}>Cancel</button>
+                    <button className="primary-button" type="submit" disabled={!name.trim()}>Save</button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
 interface SubtaskSectionProps {
     todo: Todo;
     subtasks: Subtask[];
@@ -316,7 +395,11 @@ export default function HomePage() {
     const [reminderMinutes, setReminderMinutes] = useState<ReminderMinutes | null>(null);
     const [draftSubtasks, setDraftSubtasks] = useState<string[]>([]);
     const [draftSubtaskTitle, setDraftSubtaskTitle] = useState('');
-    const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
+    const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTER_STATE);
+    const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [presets, setPresets] = useState<FilterPreset[]>([]);
+    const [showSavePresetModal, setShowSavePresetModal] = useState(false);
+    const debouncedSearch = useDebounce(filters.search, 300);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editTitle, setEditTitle] = useState('');
     const [editPriority, setEditPriority] = useState<Priority>('medium');
@@ -335,6 +418,7 @@ export default function HomePage() {
         void loadTodos();
         void loadTags();
             void loadTemplates();
+        setPresets(loadPresets());
     }, []);
 
     async function loadTodos() {
@@ -638,9 +722,37 @@ export default function HomePage() {
             setSelectedTagIds((current) => current.filter((tagId) => tagId !== id));
             setEditTagIds((current) => current.filter((tagId) => tagId !== id));
             setTodos((current) => current.map((todo) => ({ ...todo, tags: (todo.tags ?? []).filter((tag) => tag.id !== id) })));
+            setFilters((current) => current.tagId === id ? { ...current, tagId: 'all' } : current);
             setError('');
         } catch (deleteTagError) {
             setError(deleteTagError instanceof Error ? deleteTagError.message : 'Unable to delete tag');
+        }
+    }
+
+    function describeFilters(current: FilterState): string {
+        const parts: string[] = [];
+        if (current.search.trim()) parts.push(`Search: "${current.search.trim()}"`);
+        if (current.priority !== 'all') parts.push(`Priority: ${priorityLabels[current.priority]}`);
+        if (current.tagId !== 'all') { const tag = tags.find((item) => item.id === current.tagId); if (tag) parts.push(`Tag: ${tag.name}`); }
+        if (current.completion !== 'all') parts.push(`Completion: ${current.completion === 'incomplete' ? 'Incomplete' : 'Completed'}`);
+        if (current.dueDateFrom || current.dueDateTo) parts.push(`Date: ${current.dueDateFrom ?? '…'} to ${current.dueDateTo ?? '…'}`);
+        return parts.length > 0 ? parts.join(' · ') : 'No active filters';
+    }
+
+    function applyPreset(presetFilters: FilterState) {
+        setFilters(presetFilters);
+    }
+
+    function removePreset(id: string) {
+        setPresets(deleteStoredPreset(id));
+    }
+
+    function saveCurrentFilterAsPreset(name: string) {
+        try {
+            setPresets(savePreset(createPreset(name, filters)));
+            setShowSavePresetModal(false);
+        } catch (saveError) {
+            setError(saveError instanceof Error ? saveError.message : 'Unable to save preset');
         }
     }
 
@@ -738,12 +850,15 @@ export default function HomePage() {
         }
     }
 
-    const visibleTodos = sortTodos(todos.filter((todo) => priorityFilter === 'all' || todo.priority === priorityFilter));
+    const effectiveFilters: FilterState = { ...filters, search: debouncedSearch };
+    const todosWithSubtasks = todos.map((todo) => ({ ...todo, subtasks: subtasksByTodo[todo.id] }));
+    const visibleTodos = sortTodos(applyFilters(todosWithSubtasks, effectiveFilters));
     const sections = [
         { key: 'overdue', label: 'Overdue', items: visibleTodos.filter(isOverdue) },
         { key: 'pending', label: 'Pending', items: visibleTodos.filter((todo) => !todo.completed && !isOverdue(todo)) },
         { key: 'completed', label: 'Completed', items: visibleTodos.filter((todo) => todo.completed) },
     ];
+    const filtersActive = hasActiveFilters(filters);
 
     return (
         <main className="app-shell" style={{ maxWidth: 900, padding: 32 }}>
@@ -797,13 +912,43 @@ export default function HomePage() {
                     <span className="section-kicker">Your list</span>
                     <strong>{todos.filter((todo) => !todo.completed).length} open tasks</strong>
                 </div>
-                <label>Priority <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
-                    <option value="all">All priorities</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                </select></label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <SearchBar value={filters.search} onChange={(value) => setFilters((current) => ({ ...current, search: value }))} />
+                    <label>Priority <select value={filters.priority} onChange={(event) => setFilters((current) => ({ ...current, priority: event.target.value as Priority | 'all' }))}>
+                        <option value="all">All priorities</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                    </select></label>
+                    {tags.length > 0 ? <label>Tag <select value={filters.tagId === 'all' ? 'all' : String(filters.tagId)} onChange={(event) => setFilters((current) => ({ ...current, tagId: event.target.value === 'all' ? 'all' : Number(event.target.value) }))}>
+                        <option value="all">All Tags</option>
+                        {tags.map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
+                    </select></label> : null}
+                    <AdvancedToggle expanded={advancedOpen} onToggle={() => setAdvancedOpen((current) => !current)} />
+                    <FilterActions
+                        visible={filtersActive}
+                        onClearAll={() => setFilters(DEFAULT_FILTER_STATE)}
+                        onSaveFilter={() => setShowSavePresetModal(true)}
+                    />
+                </div>
+                {advancedOpen ? <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', width: '100%', marginTop: 10 }}>
+                    <label>Completion <select value={filters.completion} onChange={(event) => setFilters((current) => ({ ...current, completion: event.target.value as FilterState['completion'] }))}>
+                        <option value="all">All Todos</option>
+                        <option value="incomplete">Incomplete Only</option>
+                        <option value="completed">Completed Only</option>
+                    </select></label>
+                    <label>Due from <input type="date" value={filters.dueDateFrom ?? ''} onChange={(event) => setFilters((current) => ({ ...current, dueDateFrom: event.target.value || null }))} aria-label="Due date from" /></label>
+                    <label>Due to <input type="date" value={filters.dueDateTo ?? ''} onChange={(event) => setFilters((current) => ({ ...current, dueDateTo: event.target.value || null }))} aria-label="Due date to" /></label>
+                </div> : null}
+                {presets.length > 0 ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', width: '100%', marginTop: 10 }}>
+                    {presets.map((preset) => <SavedPresetPill key={preset.id} preset={preset} onApply={applyPreset} onDelete={removePreset} />)}
+                </div> : null}
             </div>
+            {showSavePresetModal ? <SavePresetModal
+                summary={describeFilters(filters)}
+                onClose={() => setShowSavePresetModal(false)}
+                onSave={saveCurrentFilterAsPreset}
+            /> : null}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
                 <button type="button" onClick={() => setShowTagModal(true)}>+ Manage Tags</button>
                 {tags.map((tag) => (
@@ -818,7 +963,8 @@ export default function HomePage() {
                     onSave={saveTemplate}
                 /> : null}
                 {showTemplateManager ? <TemplateManagerModal templates={templates} onClose={() => setShowTemplateManager(false)} onUse={useTemplate} onDelete={deleteTemplate} /> : null}
-            {sections.map((section) => <section key={section.key} style={{ marginTop: 28 }}>
+            {todos.length === 0 ? <p className="empty-state">You have no todos yet.</p> : visibleTodos.length === 0 ? <p className="empty-state">No todos match your filters.</p> : null}
+            {sections.filter((section) => section.items.length > 0).map((section) => <section key={section.key} style={{ marginTop: 28 }}>
                 <div className="section-heading"><h2>{section.label}</h2><span>{section.items.length}</span></div>
                 <ul style={{ padding: 0, listStyle: 'none' }}>
                     {section.items.map((todo) => <li className={`todo-card priority-${todo.priority} ${todo.completed ? 'is-complete' : ''}`} key={todo.id} style={{ borderBottom: '1px solid #ddd', padding: '12px 0' }}>
