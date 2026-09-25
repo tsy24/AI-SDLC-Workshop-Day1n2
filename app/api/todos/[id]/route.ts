@@ -29,7 +29,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const existing = id ? todoDB.findById(id) : undefined;
     if (!existing || existing.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
+    try {
+        body = await request.json();
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const update: Parameters<typeof todoDB.update>[1] = {};
     if (body.title !== undefined) {
         const title = parseTodoTitle(body.title);

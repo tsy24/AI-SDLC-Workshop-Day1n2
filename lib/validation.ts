@@ -1,4 +1,5 @@
 import type { Priority } from '@/lib/db';
+import { parseSingaporeDate } from '@/lib/timezone';
 
 const priorities: Priority[] = ['high', 'medium', 'low'];
 
@@ -23,10 +24,10 @@ export function parsePriority(value: unknown): Priority | null {
 export function parseOptionalDueDate(value: unknown): string | null | undefined {
     if (value === undefined || value === null || value === '') return null;
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value)) return undefined;
-    const date = new Date(value);
+    const date = parseSingaporeDate(value);
     return Number.isNaN(date.getTime()) ? undefined : value;
 }
 
 export function isDueDateAtLeastOneMinuteAway(value: string | null): boolean {
-    return value === null || new Date(value).getTime() >= Date.now() + 60_000;
+    return value === null || parseSingaporeDate(value).getTime() >= Date.now() + 60_000;
 }

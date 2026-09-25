@@ -38,6 +38,8 @@ Build the app in dependency order: foundation + auth, then the todo core, then f
 Dependencies: none for the foundation; all later work depends on this phase.
 
 #### Phase 1 — Auth and todo core (Engineer 1 + Engineer 2)
+**Status: Implemented.** Tests and build execution are intentionally deferred by request.
+
 1. Implement WebAuthn registration/login and session cookies.
 2. Build the authenticated todo CRUD API and the list page create/edit/delete flow.
 3. Implement priority validation, badge rendering, and sorting logic.

@@ -1,20 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
-import { todoDB } from '@/lib/db';
+import { PRIORITY_VALUES, todoDB } from '@/lib/db';
 import { isDueDateAtLeastOneMinuteAway, parseOptionalDueDate, parsePriority, parseTodoTitle } from '@/lib/validation';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    return NextResponse.json(todoDB.findAllByUser(session.userId));
+    const requestedPriority = request.nextUrl.searchParams.get('priority');
+    if (requestedPriority && !PRIORITY_VALUES.includes(requestedPriority as typeof PRIORITY_VALUES[number])) {
+        return NextResponse.json({ error: 'Priority must be high, medium, or low' }, { status: 400 });
+    }
+    return NextResponse.json(todoDB.findAllByUser(session.userId, requestedPriority as typeof PRIORITY_VALUES[number] | undefined));
 }
 
 export async function POST(request: NextRequest) {
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-    const body = await request.json();
+    let body: Record<string, unknown>;
+    try {
+        body = await request.json();
+    } catch {
+        return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+    }
     const title = parseTodoTitle(body.title);
     const dueDate = parseOptionalDueDate(body.due_date);
     const priority = body.priority === undefined ? 'medium' : parsePriority(body.priority);

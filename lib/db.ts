@@ -111,6 +111,9 @@ db.exec(`
 export type Priority = 'high' | 'medium' | 'low';
 export type RecurrencePattern = 'daily' | 'weekly' | 'monthly' | 'yearly';
 
+export const PRIORITY_VALUES: Priority[] = ['high', 'medium', 'low'];
+export const PRIORITY_ORDER: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
+
 export interface User {
     id: number;
     username: string;
@@ -284,10 +287,21 @@ export const todoDB = {
         });
         return this.findById(Number(result.lastInsertRowid)) as Todo;
     },
-    findAllByUser(userId: number) {
-        const rows = db
-            .prepare('SELECT * FROM todos WHERE user_id = ? ORDER BY completed ASC, due_date IS NULL, due_date ASC, id DESC')
-            .all(userId) as Record<string, unknown>[];
+    findAllByUser(userId: number, priority?: Priority) {
+        const query = priority
+            ? `SELECT * FROM todos WHERE user_id = ? AND priority = ?
+               ORDER BY completed ASC,
+                 CASE WHEN completed = 0 THEN CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ELSE 0 END ASC,
+                 CASE WHEN completed = 0 THEN due_date IS NULL ELSE 0 END ASC,
+                 CASE WHEN completed = 0 THEN due_date END ASC,
+                 created_at DESC`
+            : `SELECT * FROM todos WHERE user_id = ?
+               ORDER BY completed ASC,
+                 CASE WHEN completed = 0 THEN CASE priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END ELSE 0 END ASC,
+                 CASE WHEN completed = 0 THEN due_date IS NULL ELSE 0 END ASC,
+                 CASE WHEN completed = 0 THEN due_date END ASC,
+                 created_at DESC`;
+        const rows = (priority ? db.prepare(query).all(userId, priority) : db.prepare(query).all(userId)) as Record<string, unknown>[];
         return rows.map(mapTodo);
     },
     findById(id: number) {
