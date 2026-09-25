@@ -226,6 +226,19 @@ todo-app/
 
 ## 5. Run the Application
 
+### Run with Docker
+
+Docker Compose builds the production image and stores SQLite data in the named `todo-data` volume:
+
+```bash
+JWT_SECRET="replace-with-a-random-secret-of-at-least-32-characters" \
+RP_ID="localhost" \
+RP_ORIGIN="http://localhost:3000" \
+docker compose up --build
+```
+
+For a production hostname, set `RP_ID` and `RP_ORIGIN` to that hostname and its HTTPS origin. Stop the container with `docker compose down`; the named volume keeps the database for the next start.
+
 ### Start Development Server
 ```bash
 npm run dev
