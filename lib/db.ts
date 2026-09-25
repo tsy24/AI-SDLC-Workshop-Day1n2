@@ -174,6 +174,15 @@ export interface Subtask {
     created_at: string;
 }
 
+export interface CreateSubtaskDto {
+    title: string;
+}
+
+export interface UpdateSubtaskDto {
+    title?: string;
+    completed?: boolean;
+}
+
 export interface Tag {
     id: number;
     user_id: number;
@@ -322,6 +331,48 @@ export const todoDB = {
     },
     delete(id: number) {
         db.prepare('DELETE FROM todos WHERE id = ?').run(id);
+    },
+};
+
+function mapSubtask(row: Record<string, unknown>): Subtask {
+    return {
+        ...(row as Omit<Subtask, 'completed'>),
+        completed: Boolean(row.completed),
+    } as Subtask;
+}
+
+export const subtaskDB = {
+    findByTodoId(todoId: number) {
+        const rows = db
+            .prepare('SELECT * FROM subtasks WHERE todo_id = ? ORDER BY position ASC')
+            .all(todoId) as Record<string, unknown>[];
+        return rows.map(mapSubtask);
+    },
+    findById(id: number) {
+        const row = db.prepare('SELECT * FROM subtasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+        return row ? mapSubtask(row) : undefined;
+    },
+    create(todoId: number, data: CreateSubtaskDto) {
+        // gaps from deletes are fine; only the next position needs to be unique
+        const { maxPosition } = db
+            .prepare('SELECT COALESCE(MAX(position), -1) AS maxPosition FROM subtasks WHERE todo_id = ?')
+            .get(todoId) as { maxPosition: number };
+        const info = db
+            .prepare('INSERT INTO subtasks (todo_id, title, position) VALUES (?, ?, ?)')
+            .run(todoId, data.title, maxPosition + 1);
+        return this.findById(Number(info.lastInsertRowid)) as Subtask;
+    },
+    update(id: number, data: UpdateSubtaskDto) {
+        const fields: string[] = [];
+        const values: Record<string, string | number | null> = { id };
+        if (data.title !== undefined) { fields.push('title = @title'); values.title = data.title; }
+        if (data.completed !== undefined) { fields.push('completed = @completed'); values.completed = data.completed ? 1 : 0; }
+        if (fields.length === 0) return this.findById(id);
+        db.prepare(`UPDATE subtasks SET ${fields.join(', ')} WHERE id = @id`).run(values);
+        return this.findById(id);
+    },
+    delete(id: number) {
+        db.prepare('DELETE FROM subtasks WHERE id = ?').run(id);
     },
 };
 

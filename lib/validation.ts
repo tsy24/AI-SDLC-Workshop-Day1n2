@@ -15,6 +15,10 @@ export function parseTodoTitle(value: unknown): string | null {
     return title.length >= 1 && title.length <= 500 ? title : null;
 }
 
+export function parseSubtaskTitle(value: unknown): string | null {
+    return parseTodoTitle(value);
+}
+
 export function parsePriority(value: unknown): Priority | null {
     return typeof value === 'string' && priorities.includes(value as Priority)
         ? value as Priority
