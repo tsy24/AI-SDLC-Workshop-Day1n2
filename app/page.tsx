@@ -355,6 +355,32 @@ export default function HomePage() {
     async function createTodo(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setError('');
+        const originalTitle = title;
+        const originalDueDate = dueDate;
+        const originalPriority = priority;
+        const originalRecurring = isRecurring;
+        const originalReminder = reminderMinutes;
+        const originalTagIds = [...selectedTagIds];
+        const temporaryId = -Date.now();
+        const optimisticTodo: Todo = {
+            id: temporaryId,
+            title: originalTitle.trim(),
+            completed: false,
+            priority: originalPriority,
+            due_date: originalDueDate || null,
+            is_recurring: originalRecurring,
+            recurrence_pattern: originalRecurring ? recurrencePattern : null,
+            reminder_minutes: originalReminder,
+            created_at: new Date().toISOString(),
+            tags: tags.filter((tag) => originalTagIds.includes(tag.id)),
+        };
+        setTodos((current) => sortTodos([optimisticTodo, ...current]));
+        setSelectedTagIds([]);
+        setTitle('');
+        setDueDate('');
+        setPriority('medium');
+        setIsRecurring(false);
+        setReminderMinutes(null);
         try {
             const response = await fetch('/api/todos', {
                 method: 'POST',
@@ -371,14 +397,15 @@ export default function HomePage() {
             });
             const todo = await response.json();
             if (!response.ok) throw new Error(todo.error ?? 'Unable to create todo');
-            setTodos((current) => sortTodos([todo, ...current]));
-            setSelectedTagIds([]);
-            setTitle('');
-            setDueDate('');
-            setPriority('medium');
-            setIsRecurring(false);
-            setReminderMinutes(null);
+            setTodos((current) => sortTodos(current.map((item) => item.id === temporaryId ? todo : item)));
         } catch (createError) {
+            setTodos((current) => current.filter((item) => item.id !== temporaryId));
+            setTitle(originalTitle);
+            setDueDate(originalDueDate);
+            setPriority(originalPriority);
+            setIsRecurring(originalRecurring);
+            setReminderMinutes(originalReminder);
+            setSelectedTagIds(originalTagIds);
             setError(createError instanceof Error ? createError.message : 'Unable to create todo');
         }
     }
@@ -455,6 +482,19 @@ export default function HomePage() {
     async function saveEdit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         if (editingId === null) return;
+        const originalTodo = todos.find((todo) => todo.id === editingId);
+        if (!originalTodo) return;
+        const optimisticTodo: Todo = {
+            ...originalTodo,
+            title: editTitle.trim(),
+            priority: editPriority,
+            due_date: editDueDate || null,
+            is_recurring: editRecurring,
+            recurrence_pattern: editRecurring ? editRecurrencePattern : null,
+            reminder_minutes: editReminderMinutes,
+            tags: tags.filter((tag) => editTagIds.includes(tag.id)),
+        };
+        setTodos((current) => sortTodos(current.map((todo) => todo.id === editingId ? optimisticTodo : todo)));
         try {
             const response = await fetch(`/api/todos/${editingId}`, {
                 method: 'PUT',
@@ -477,6 +517,7 @@ export default function HomePage() {
             setEditingId(null);
             await loadTodoTags(todo.id);
         } catch (updateError) {
+            setTodos((current) => current.map((todo) => todo.id === originalTodo.id ? originalTodo : todo));
             setError(updateError instanceof Error ? updateError.message : 'Unable to update todo');
         }
     }
@@ -502,6 +543,7 @@ export default function HomePage() {
     }
 
     async function deleteTodo(todo: Todo) {
+        if (!window.confirm(`Delete "${todo.title}"? This cannot be undone.`)) return;
         const previousTodos = todos;
         setTodos((current) => current.filter((item) => item.id !== todo.id));
         try {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
-import { PRIORITY_VALUES, todoDB } from '@/lib/db';
+import { PRIORITY_VALUES, tagDB, todoDB } from '@/lib/db';
 import { isDueDateAtLeastOneMinuteAway, parseOptionalDueDate, parsePriority, parseRecurrencePattern, parseReminderMinutes, parseRecurring, parseTodoTitle } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
@@ -30,6 +30,7 @@ export async function POST(request: NextRequest) {
     const recurring = parseRecurring(body.is_recurring);
     const recurrencePattern = body.recurrence_pattern === undefined ? null : parseRecurrencePattern(body.recurrence_pattern);
     const reminderMinutes = parseReminderMinutes(body.reminder_minutes);
+    const tagIds = body.tag_ids === undefined ? [] : body.tag_ids;
 
     if (!title) return NextResponse.json({ error: 'Title is required and must be 500 characters or fewer' }, { status: 400 });
     if (dueDate === undefined) return NextResponse.json({ error: 'Due date must be a valid ISO date' }, { status: 400 });
@@ -39,11 +40,14 @@ export async function POST(request: NextRequest) {
     if (recurring && !dueDate) return NextResponse.json({ error: 'Recurring todos require a due date' }, { status: 400 });
     if (recurring && !recurrencePattern) return NextResponse.json({ error: 'Recurring todos require a valid recurrence pattern' }, { status: 400 });
     if (reminderMinutes !== null && !dueDate) return NextResponse.json({ error: 'Reminders require a due date' }, { status: 400 });
+    if (!Array.isArray(tagIds) || tagIds.some((tagId) => !Number.isInteger(tagId) || tagId < 1)) {
+        return NextResponse.json({ error: 'tag_ids must be an array of positive integers' }, { status: 400 });
+    }
     if (!isDueDateAtLeastOneMinuteAway(dueDate)) {
         return NextResponse.json({ error: 'Due date must be at least 1 minute in the future' }, { status: 400 });
     }
 
-    return NextResponse.json(todoDB.create({
+    const todo = todoDB.create({
         user_id: session.userId,
         title,
         due_date: dueDate,
@@ -51,5 +55,7 @@ export async function POST(request: NextRequest) {
         is_recurring: recurring,
         recurrence_pattern: recurring ? recurrencePattern : null,
         reminder_minutes: reminderMinutes,
-    }), { status: 201 });
+    });
+    const tags = tagDB.replaceTodoTags(todo.id, tagIds as number[], session.userId);
+    return NextResponse.json({ ...todo, tags }, { status: 201 });
 }
