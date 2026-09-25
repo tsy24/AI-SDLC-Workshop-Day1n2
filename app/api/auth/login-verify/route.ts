@@ -35,10 +35,11 @@ export async function POST(request: NextRequest) {
         expectedChallenge,
         expectedOrigin: process.env.RP_ORIGIN ?? 'http://localhost:3000',
         expectedRPID: process.env.RP_ID ?? 'localhost',
-        authenticator: {
-            credentialID: isoBase64URL.toBuffer(authenticator.credential_id),
-            credentialPublicKey: authenticator.credential_public_key,
+        credential: {
+            id: authenticator.credential_id,
+            publicKey: new Uint8Array(authenticator.credential_public_key),
             counter: authenticator.counter ?? 0,
+            transports: undefined,
         },
     });
     if (!verification.verified) {

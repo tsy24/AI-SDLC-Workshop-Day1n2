@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
-import { todoDB } from '@/lib/db';
+import { type ReminderMinutes, todoDB } from '@/lib/db';
 import { calculateNextDueDate } from '@/lib/recurrence';
 import { isDueDateAtLeastOneMinuteAway, parseOptionalDueDate, parsePriority, parseRecurrencePattern, parseReminderMinutes, parseRecurring, parseTodoTitle } from '@/lib/validation';
 
@@ -73,7 +73,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         if (typeof body.completed !== 'boolean') return NextResponse.json({ error: 'Completed must be boolean' }, { status: 400 });
         update.completed = body.completed;
     }
-    if (body.reminder_minutes !== undefined) update.reminder_minutes = reminderMinutes;
+    if (body.reminder_minutes !== undefined) update.reminder_minutes = (reminderMinutes ?? null) as typeof update.reminder_minutes;
     if (body.last_notification_sent !== undefined) {
         if (typeof body.last_notification_sent !== 'string' || Number.isNaN(Date.parse(body.last_notification_sent))) {
             return NextResponse.json({ error: 'Invalid notification timestamp' }, { status: 400 });
@@ -88,7 +88,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
             ...update,
             is_recurring: true,
             recurrence_pattern: recurrencePattern,
-            reminder_minutes: reminderMinutes,
+            reminder_minutes: reminderMinutes === null || reminderMinutes === undefined ? null : reminderMinutes as ReminderMinutes,
             completed: true,
         }, nextDueDate);
         return NextResponse.json(result);

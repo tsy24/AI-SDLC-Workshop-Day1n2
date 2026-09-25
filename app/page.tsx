@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import type { Subtask } from '@/lib/db';
+import type { Subtask, Tag } from '@/lib/db';
 import { calculateProgress } from '@/lib/subtasks';
 import { formatSingaporeDate, parseSingaporeDate } from '@/lib/timezone';
 import { useNotifications } from '@/lib/hooks/useNotifications';
@@ -20,15 +20,12 @@ interface Todo {
     recurrence_pattern: RecurrencePattern | null;
     reminder_minutes: ReminderMinutes | null;
     created_at: string;
+    tags?: Tag[];
 }
 
 const priorityOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 const priorityLabels: Record<Priority, string> = { high: 'High', medium: 'Medium', low: 'Low' };
-const priorityColors: Record<Priority, string> = {
-    high: '#b91c1c',
-    medium: '#a16207',
-    low: '#1d4ed8',
-};
+const priorityColors: Record<Priority, string> = { high: '#b91c1c', medium: '#a16207', low: '#1d4ed8' };
 const reminderLabels: Record<ReminderMinutes, string> = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 1440: '1d', 2880: '2d', 10080: '1w' };
 
 function sortTodos(todos: Todo[]): Todo[] {
@@ -57,6 +54,89 @@ function isOverdue(todo: Todo): boolean {
 
 function formatDueDate(value: string | null): string {
     return value ? formatSingaporeDate(value, 'yyyy-MM-dd HH:mm') : 'No due date';
+}
+
+function TagPill({ tag, selected, onClick }: { tag: Tag; selected?: boolean; onClick?: (tag: Tag) => void }) {
+    return (
+        <button
+            type="button"
+            onClick={() => onClick?.(tag)}
+            style={{
+                background: selected ? tag.color : '#f3f4f6',
+                color: selected ? '#ffffff' : '#374151',
+                border: `1px solid ${selected ? tag.color : '#d1d5db'}`,
+                borderRadius: 999,
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+            }}
+        >
+            {selected ? '✓' : null}
+            {tag.name}
+        </button>
+    );
+}
+
+function ManageTagsModal({
+    tags,
+    onClose,
+    onCreate,
+    onUpdate,
+    onDelete,
+}: {
+    tags: Tag[];
+    onClose: () => void;
+    onCreate: (input: { name: string; color: string }) => Promise<void>;
+    onUpdate: (id: number, input: { name: string; color: string }) => Promise<void>;
+    onDelete: (id: number) => Promise<void>;
+}) {
+    const [name, setName] = useState('');
+    const [color, setColor] = useState('#3B82F6');
+    const [editingId, setEditingId] = useState<number | null>(null);
+    const [editingName, setEditingName] = useState('');
+    const [editingColor, setEditingColor] = useState('#3B82F6');
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+            <div style={{ background: '#fff', width: 420, maxWidth: '90vw', borderRadius: 12, padding: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h2 style={{ margin: 0 }}>Manage Tags</h2>
+                    <button type="button" onClick={onClose}>Close</button>
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Tag name" aria-label="Tag name" style={{ flex: 1 }} />
+                    <input type="color" value={color} onChange={(event) => setColor(event.target.value)} aria-label="Tag color" />
+                    <button type="button" onClick={async () => { await onCreate({ name, color }); setName(''); setColor('#3B82F6'); }}>Create</button>
+                </div>
+                <div style={{ display: 'grid', gap: 8, maxHeight: 260, overflowY: 'auto' }}>
+                    {tags.map((tag) => (
+                        <div key={tag.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 10px' }}>
+                            {editingId === tag.id ? (
+                                <>
+                                    <input value={editingName} onChange={(event) => setEditingName(event.target.value)} aria-label={`Edit tag ${tag.name}`} />
+                                    <input type="color" value={editingColor} onChange={(event) => setEditingColor(event.target.value)} aria-label={`Edit tag color ${tag.name}`} />
+                                    <button type="button" onClick={async () => { await onUpdate(tag.id, { name: editingName, color: editingColor }); setEditingId(null); }}>Save</button>
+                                    <button type="button" onClick={() => setEditingId(null)}>Cancel</button>
+                                </>
+                            ) : (
+                                <>
+                                    <TagPill tag={tag} selected />
+                                    <div style={{ display: 'flex', gap: 8 }}>
+                                        <button type="button" onClick={() => { setEditingId(tag.id); setEditingName(tag.name); setEditingColor(tag.color); }}>Edit</button>
+                                        <button type="button" onClick={() => void onDelete(tag.id)} style={{ color: '#dc2626' }}>Delete</button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 interface SubtaskSectionProps {
@@ -132,6 +212,9 @@ function SubtaskSection({
 export default function HomePage() {
     const { permission, requestPermission } = useNotifications();
     const [todos, setTodos] = useState<Todo[]>([]);
+    const [tags, setTags] = useState<Tag[]>([]);
+    const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+    const [showTagModal, setShowTagModal] = useState(false);
     const [title, setTitle] = useState('');
     const [priority, setPriority] = useState<Priority>('medium');
     const [dueDate, setDueDate] = useState('');
@@ -146,13 +229,16 @@ export default function HomePage() {
     const [editRecurring, setEditRecurring] = useState(false);
     const [editRecurrencePattern, setEditRecurrencePattern] = useState<RecurrencePattern>('daily');
     const [editReminderMinutes, setEditReminderMinutes] = useState<ReminderMinutes | null>(null);
+    const [editTagIds, setEditTagIds] = useState<number[]>([]);
     const [error, setError] = useState('');
     const [subtasksByTodo, setSubtasksByTodo] = useState<Record<number, Subtask[]>>({});
+    const [todoTagsByTodo, setTodoTagsByTodo] = useState<Record<number, Tag[]>>({});
     const [expandedSubtasks, setExpandedSubtasks] = useState<Record<number, boolean>>({});
     const [newSubtaskTitle, setNewSubtaskTitle] = useState<Record<number, string>>({});
 
     useEffect(() => {
-        loadTodos();
+        void loadTodos();
+        void loadTags();
     }, []);
 
     async function loadTodos() {
@@ -162,10 +248,21 @@ export default function HomePage() {
             if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to load todos');
             const loadedTodos = payload as Todo[];
             setTodos(loadedTodos);
-            // preload so progress bars are visible even before a checklist is expanded
             await Promise.all(loadedTodos.map((todo) => loadSubtasks(todo.id)));
+            await Promise.all(loadedTodos.map((todo) => loadTodoTags(todo.id)));
         } catch (loadError) {
             setError(loadError instanceof Error ? loadError.message : 'Unable to load todos');
+        }
+    }
+
+    async function loadTags() {
+        try {
+            const response = await fetch('/api/tags');
+            const payload = (await response.json()) as Tag[] | { error: string };
+            if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to load tags');
+            setTags(payload as Tag[]);
+        } catch (loadError) {
+            setError(loadError instanceof Error ? loadError.message : 'Unable to load tags');
         }
     }
 
@@ -178,6 +275,26 @@ export default function HomePage() {
         } catch (loadError) {
             setError(loadError instanceof Error ? loadError.message : 'Unable to load subtasks');
         }
+    }
+
+    async function loadTodoTags(todoId: number) {
+        try {
+            const response = await fetch(`/api/todos/${todoId}/tags`);
+            const payload = (await response.json()) as Tag[] | { error: string };
+            if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to load tags');
+            setTodoTagsByTodo((current) => ({ ...current, [todoId]: payload as Tag[] }));
+            setTodos((current) => current.map((todo) => todo.id === todoId ? { ...todo, tags: payload as Tag[] } : todo));
+        } catch (loadError) {
+            setError(loadError instanceof Error ? loadError.message : 'Unable to load todo tags');
+        }
+    }
+
+    function toggleTagSelection(tagId: number) {
+        setSelectedTagIds((current) => current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId]);
+    }
+
+    function toggleEditTagSelection(tagId: number) {
+        setEditTagIds((current) => current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId]);
     }
 
     function toggleSubtasksExpanded(todoId: number) {
@@ -242,11 +359,20 @@ export default function HomePage() {
             const response = await fetch('/api/todos', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title, priority, due_date: dueDate || null, is_recurring: isRecurring, recurrence_pattern: recurrencePattern, reminder_minutes: reminderMinutes }),
+                body: JSON.stringify({
+                    title,
+                    priority,
+                    due_date: dueDate || null,
+                    is_recurring: isRecurring,
+                    recurrence_pattern: recurrencePattern,
+                    reminder_minutes: reminderMinutes,
+                    tag_ids: selectedTagIds,
+                }),
             });
             const todo = await response.json();
             if (!response.ok) throw new Error(todo.error ?? 'Unable to create todo');
             setTodos((current) => sortTodos([todo, ...current]));
+            setSelectedTagIds([]);
             setTitle('');
             setDueDate('');
             setPriority('medium');
@@ -254,6 +380,64 @@ export default function HomePage() {
             setReminderMinutes(null);
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create todo');
+        }
+    }
+
+    async function createTag(input: { name: string; color: string }) {
+        const trimmed = input.name.trim();
+        if (!trimmed) {
+            setError('Tag name is required');
+            return;
+        }
+        try {
+            const response = await fetch('/api/tags', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmed, color: input.color }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to create tag');
+            setTags((current) => [...current, payload].sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })));
+            setError('');
+        } catch (createTagError) {
+            setError(createTagError instanceof Error ? createTagError.message : 'Unable to create tag');
+        }
+    }
+
+    async function updateTag(id: number, input: { name: string; color: string }) {
+        const trimmed = input.name.trim();
+        if (!trimmed) {
+            setError('Tag name is required');
+            return;
+        }
+        try {
+            const response = await fetch(`/api/tags/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: trimmed, color: input.color }),
+            });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to update tag');
+            setTags((current) => current.map((tag) => tag.id === id ? payload : tag).sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })));
+            setTodos((current) => current.map((todo) => ({ ...todo, tags: (todo.tags ?? []).map((tag) => tag.id === id ? payload : tag) })));
+            setError('');
+        } catch (updateTagError) {
+            setError(updateTagError instanceof Error ? updateTagError.message : 'Unable to update tag');
+        }
+    }
+
+    async function deleteTag(id: number) {
+        try {
+            const response = await fetch(`/api/tags/${id}`, { method: 'DELETE' });
+            const payload = await response.json();
+            if (!response.ok) throw new Error(payload.error ?? 'Unable to delete tag');
+            setTags((current) => current.filter((tag) => tag.id !== id));
+            setSelectedTagIds((current) => current.filter((tagId) => tagId !== id));
+            setEditTagIds((current) => current.filter((tagId) => tagId !== id));
+            setTodos((current) => current.map((todo) => ({ ...todo, tags: (todo.tags ?? []).filter((tag) => tag.id !== id) })));
+            setError('');
+        } catch (deleteTagError) {
+            setError(deleteTagError instanceof Error ? deleteTagError.message : 'Unable to delete tag');
         }
     }
 
@@ -265,6 +449,7 @@ export default function HomePage() {
         setEditRecurring(todo.is_recurring);
         setEditRecurrencePattern(todo.recurrence_pattern ?? 'daily');
         setEditReminderMinutes(todo.reminder_minutes);
+        setEditTagIds((todo.tags ?? []).map((tag) => tag.id));
     }
 
     async function saveEdit(event: FormEvent<HTMLFormElement>) {
@@ -274,13 +459,23 @@ export default function HomePage() {
             const response = await fetch(`/api/todos/${editingId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ title: editTitle, priority: editPriority, due_date: editDueDate || null, is_recurring: editRecurring, recurrence_pattern: editRecurrencePattern, reminder_minutes: editReminderMinutes }),
+                body: JSON.stringify({
+                    title: editTitle,
+                    priority: editPriority,
+                    due_date: editDueDate || null,
+                    is_recurring: editRecurring,
+                    recurrence_pattern: editRecurrencePattern,
+                    reminder_minutes: editReminderMinutes,
+                    tag_ids: editTagIds,
+                }),
             });
             const payload = await response.json() as Todo | { todo: Todo; nextInstance?: Todo };
             if (!response.ok) throw new Error('Unable to update todo');
             const todo = 'todo' in payload ? payload.todo : payload;
-            setTodos((current) => sortTodos(current.map((item) => item.id === todo.id ? todo : item)));
+            const updatedTodo = { ...(todo as Todo), tags: todoTagsByTodo[todo.id] ?? (todo as Todo).tags ?? [] };
+            setTodos((current) => sortTodos(current.map((item) => item.id === todo.id ? updatedTodo : item)));
             setEditingId(null);
+            await loadTodoTags(todo.id);
         } catch (updateError) {
             setError(updateError instanceof Error ? updateError.message : 'Unable to update todo');
         }
@@ -318,6 +513,7 @@ export default function HomePage() {
             setSubtasksByTodo((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
             setExpandedSubtasks((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
             setNewSubtaskTitle((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
+            setTodoTagsByTodo((current) => { const { [todo.id]: _removed, ...rest } = current; return rest; });
         } catch (deleteError) {
             setTodos(previousTodos);
             setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete todo');
@@ -355,13 +551,23 @@ export default function HomePage() {
                 <select value={reminderMinutes ?? ''} disabled={!dueDate} onChange={(event) => setReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
                 <button type="submit">Add</button>
             </form>
-            <label>Filter priority: <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
-                <option value="all">All priorities</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-            </select></label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+                <button type="button" onClick={() => setShowTagModal(true)}>+ Manage Tags</button>
+                {tags.map((tag) => (
+                    <TagPill key={tag.id} tag={tag} selected={selectedTagIds.includes(tag.id)} onClick={() => toggleTagSelection(tag.id)} />
+                ))}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label>Filter priority:</label>
+                <select value={priorityFilter} onChange={(event) => setPriorityFilter(event.target.value as Priority | 'all')}>
+                    <option value="all">All priorities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
             {error ? <p role="alert">{error}</p> : null}
+            {showTagModal ? <ManageTagsModal tags={tags} onClose={() => setShowTagModal(false)} onCreate={createTag} onUpdate={updateTag} onDelete={deleteTag} /> : null}
             {sections.map((section) => <section key={section.key} style={{ marginTop: 28 }}>
                 <h2>{section.label} ({section.items.length})</h2>
                 <ul style={{ padding: 0, listStyle: 'none' }}>
@@ -375,6 +581,11 @@ export default function HomePage() {
                             <label><input type="checkbox" checked={editRecurring} disabled={!editDueDate} onChange={(event) => setEditRecurring(event.target.checked)} /> Repeat</label>
                             {editRecurring ? <select value={editRecurrencePattern} onChange={(event) => setEditRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
                             <select value={editReminderMinutes ?? ''} disabled={!editDueDate} onChange={(event) => setEditReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+                                {tags.map((tag) => (
+                                    <TagPill key={tag.id} tag={tag} selected={editTagIds.includes(tag.id)} onClick={() => toggleEditTagSelection(tag.id)} />
+                                ))}
+                            </div>
                             <button type="submit">Save</button><button type="button" onClick={() => setEditingId(null)}>Cancel</button>
                         </form> : <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                             <input type="checkbox" checked={todo.completed} onChange={() => toggleTodo(todo)} aria-label={`Complete ${todo.title}`} />
@@ -382,6 +593,7 @@ export default function HomePage() {
                             <strong style={{ color: priorityColors[todo.priority] }}>{priorityLabels[todo.priority]}</strong>
                             {todo.is_recurring && todo.recurrence_pattern ? <strong>↻ {todo.recurrence_pattern}</strong> : null}
                             {todo.reminder_minutes ? <strong>Bell {reminderLabels[todo.reminder_minutes]}</strong> : null}
+                            {(todo.tags ?? []).map((tag) => <TagPill key={tag.id} tag={tag} selected />)}
                             <small>{formatDueDate(todo.due_date)}</small>
                             <button type="button" onClick={() => beginEdit(todo)}>Edit</button>
                             <button type="button" onClick={() => deleteTodo(todo)}>Delete</button>

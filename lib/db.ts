@@ -217,6 +217,16 @@ export interface Tag {
     created_at: string;
 }
 
+export interface CreateTagInput {
+    name: string;
+    color?: string;
+}
+
+export interface UpdateTagInput {
+    name?: string;
+    color?: string;
+}
+
 export interface Template {
     id: number;
     user_id: number;
@@ -449,6 +459,82 @@ export const subtaskDB = {
     },
     delete(id: number) {
         db.prepare('DELETE FROM subtasks WHERE id = ?').run(id);
+    },
+};
+
+export const tagDB = {
+    findAllByUser(userId: number) {
+        return db
+            .prepare('SELECT * FROM tags WHERE user_id = ? ORDER BY name COLLATE NOCASE ASC')
+            .all(userId) as Tag[];
+    },
+    findById(id: number, userId: number) {
+        return db
+            .prepare('SELECT * FROM tags WHERE id = ? AND user_id = ?')
+            .get(id, userId) as Tag | undefined;
+    },
+    findByTodoId(todoId: number, userId: number) {
+        return db
+            .prepare(`
+                SELECT tags.*
+                FROM tags
+                INNER JOIN todo_tags ON todo_tags.tag_id = tags.id
+                WHERE todo_tags.todo_id = ? AND tags.user_id = ?
+                ORDER BY tags.name COLLATE NOCASE ASC
+            `)
+            .all(todoId, userId) as Tag[];
+    },
+    getTagIdsForTodo(todoId: number) {
+        return db
+            .prepare('SELECT tag_id FROM todo_tags WHERE todo_id = ? ORDER BY tag_id ASC')
+            .all(todoId) as Array<{ tag_id: number }>;
+    },
+    create(userId: number, input: CreateTagInput) {
+        const name = input.name.trim();
+        const color = /^#[0-9A-Fa-f]{6}$/.test(input.color ?? '#3B82F6') ? (input.color ?? '#3B82F6') : '#3B82F6';
+        const info = db
+            .prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)')
+            .run(userId, name, color);
+        return this.findById(Number(info.lastInsertRowid), userId) as Tag;
+    },
+    update(id: number, userId: number, input: UpdateTagInput) {
+        const fields: string[] = [];
+        const values: Record<string, string | number> = { id, user_id: userId };
+        if (input.name !== undefined) { fields.push('name = @name'); values.name = input.name.trim(); }
+        if (input.color !== undefined) { fields.push('color = @color'); values.color = /^#[0-9A-Fa-f]{6}$/.test(input.color) ? input.color : '#3B82F6'; }
+        if (fields.length === 0) return this.findById(id, userId);
+        db.prepare(`UPDATE tags SET ${fields.join(', ')} WHERE id = @id AND user_id = @user_id`).run(values);
+        return this.findById(id, userId) as Tag | undefined;
+    },
+    delete(id: number, userId: number) {
+        const tag = this.findById(id, userId);
+        if (!tag) return false;
+        db.prepare('DELETE FROM tags WHERE id = ? AND user_id = ?').run(id, userId);
+        return true;
+    },
+    attachToTodo(todoId: number, tagId: number, userId: number) {
+        const tag = this.findById(tagId, userId);
+        if (!tag) return false;
+        db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)').run(todoId, tagId);
+        return true;
+    },
+    detachFromTodo(todoId: number, tagId: number, userId: number) {
+        const tag = this.findById(tagId, userId);
+        if (!tag) return false;
+        db.prepare('DELETE FROM todo_tags WHERE todo_id = ? AND tag_id = ?').run(todoId, tagId);
+        return true;
+    },
+    replaceTodoTags(todoId: number, tagIds: number[], userId: number) {
+        const existingIds = this.getTagIdsForTodo(todoId).map(({ tag_id }) => tag_id);
+        const validIds = new Set(tagIds.filter((tagId) => this.findById(tagId, userId) !== undefined));
+        const toRemove = existingIds.filter((tagId) => !validIds.has(tagId));
+        for (const tagId of toRemove) {
+            db.prepare('DELETE FROM todo_tags WHERE todo_id = ? AND tag_id = ?').run(todoId, tagId);
+        }
+        for (const tagId of [...validIds]) {
+            db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)').run(todoId, tagId);
+        }
+        return this.findByTodoId(todoId, userId);
     },
 };
 
