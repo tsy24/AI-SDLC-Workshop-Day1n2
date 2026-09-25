@@ -3,6 +3,8 @@ import path from 'node:path';
 
 import Database from 'better-sqlite3';
 
+import type { ImportResult, TodoWithRelations, ValidatedTodoExportItem } from './export-import';
+
 const dbPath = path.join(process.cwd(), 'todos.db');
 
 if (!fs.existsSync(dbPath)) {
@@ -396,6 +398,34 @@ export const todoDB = {
         const rows = (priority ? db.prepare(query).all(userId, priority) : db.prepare(query).all(userId)) as Record<string, unknown>[];
         return rows.map(mapTodo);
     },
+    findAllWithRelations(userId: number): TodoWithRelations[] {
+        const todos = this.findAllByUser(userId);
+        if (todos.length === 0) return [];
+
+        const subtasks = (db.prepare(`
+            SELECT subtasks.*
+            FROM subtasks
+            INNER JOIN todos ON todos.id = subtasks.todo_id
+            WHERE todos.user_id = ?
+            ORDER BY subtasks.todo_id, subtasks.position
+        `).all(userId) as Record<string, unknown>[]).map(mapSubtask);
+        const tags = db.prepare(`
+            SELECT todo_tags.todo_id, tags.*
+            FROM tags
+            INNER JOIN todo_tags ON todo_tags.tag_id = tags.id
+            INNER JOIN todos ON todos.id = todo_tags.todo_id
+            WHERE tags.user_id = ? AND todos.user_id = ?
+            ORDER BY todo_tags.todo_id, tags.name COLLATE NOCASE
+        `).all(userId, userId) as Array<Tag & { todo_id: number }>;
+
+        return todos.map((todo) => ({
+            ...todo,
+            subtasks: subtasks.filter((subtask) => subtask.todo_id === todo.id),
+            tags: tags
+                .filter((tag) => tag.todo_id === todo.id)
+                .map(({ todo_id: _todoId, ...tag }) => tag),
+        }));
+    },
     findById(id: number) {
         const row = db.prepare('SELECT * FROM todos WHERE id = ?').get(id) as Record<string, unknown> | undefined;
         return row ? mapTodo(row) : undefined;
@@ -460,6 +490,71 @@ export const todoDB = {
             UPDATE todos SET last_notification_sent = ?
             WHERE id = ? AND user_id = ? AND completed = 0 AND last_notification_sent IS NULL
         `).run(timestamp, id, userId).changes > 0;
+    },
+    importAll(userId: number, items: ValidatedTodoExportItem[]): ImportResult {
+        const insertTodo = db.prepare(`
+            INSERT INTO todos (
+                user_id, title, completed, due_date, priority, is_recurring,
+                recurrence_pattern, reminder_minutes, created_at
+            ) VALUES (
+                @user_id, @title, @completed, @due_date, @priority, @is_recurring,
+                @recurrence_pattern, @reminder_minutes, @created_at
+            )
+        `);
+        const insertSubtask = db.prepare(`
+            INSERT INTO subtasks (todo_id, title, completed, position)
+            VALUES (@todo_id, @title, @completed, @position)
+        `);
+        const findTagByName = db.prepare(`
+            SELECT id FROM tags WHERE user_id = ? AND name = ? COLLATE NOCASE
+        `);
+        const insertTag = db.prepare(`
+            INSERT INTO tags (user_id, name, color) VALUES (@user_id, @name, @color)
+        `);
+        const linkTag = db.prepare('INSERT OR IGNORE INTO todo_tags (todo_id, tag_id) VALUES (?, ?)');
+
+        return db.transaction((transactionItems: ValidatedTodoExportItem[]) => {
+            let tagsCreated = 0;
+            let tagsReused = 0;
+
+            for (const item of transactionItems) {
+                const todoResult = insertTodo.run({
+                    user_id: userId,
+                    title: item.title,
+                    completed: item.completed ? 1 : 0,
+                    due_date: item.due_date,
+                    priority: item.priority,
+                    is_recurring: item.is_recurring ? 1 : 0,
+                    recurrence_pattern: item.recurrence_pattern,
+                    reminder_minutes: item.reminder_minutes,
+                    created_at: item.created_at,
+                });
+                const todoId = Number(todoResult.lastInsertRowid);
+
+                item.subtasks.forEach((subtask, position) => {
+                    insertSubtask.run({
+                        todo_id: todoId,
+                        title: subtask.title,
+                        completed: subtask.completed ? 1 : 0,
+                        position,
+                    });
+                });
+
+                for (const tag of item.tags) {
+                    const existing = findTagByName.get(userId, tag.name) as { id: number } | undefined;
+                    const tagId = existing?.id ?? Number(insertTag.run({
+                        user_id: userId,
+                        name: tag.name,
+                        color: tag.color,
+                    }).lastInsertRowid);
+                    if (existing) tagsReused += 1;
+                    else tagsCreated += 1;
+                    linkTag.run(todoId, tagId);
+                }
+            }
+
+            return { imported: transactionItems.length, tagsCreated, tagsReused };
+        })(items);
     },
 };
 

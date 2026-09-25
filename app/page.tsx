@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import type { Subtask, Tag } from '@/lib/db';
 import {
     applyFilters,
@@ -86,6 +86,75 @@ function sortTodos(todos: Todo[]): Todo[] {
 
 function isOverdue(todo: Todo): boolean {
     return !todo.completed && Boolean(todo.due_date && parseSingaporeDate(todo.due_date).getTime() < Date.now());
+}
+
+function ExportImportToolbar({ onImported }: { onImported: () => void }) {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+    const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+
+    function download(format: 'json' | 'csv') {
+        window.location.assign(`/api/todos/export?format=${format}`);
+    }
+
+    async function importFile(event: React.ChangeEvent<HTMLInputElement>) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        setImporting(true);
+        setMessage(file.size > 10 * 1024 * 1024
+            ? { type: 'info', text: 'Large import detected. This may take a while.' }
+            : null);
+        try {
+            const text = await file.text();
+            let body: unknown;
+            try {
+                body = JSON.parse(text) as unknown;
+            } catch {
+                setMessage({ type: 'error', text: 'Invalid JSON format' });
+                return;
+            }
+            const response = await fetch('/api/todos/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const payload = await response.json().catch(() => ({ error: 'Failed to import todos' })) as { imported?: number; error?: string };
+            if (!response.ok) throw new Error(payload.error ?? 'Failed to import todos');
+            onImported();
+            setMessage({ type: 'success', text: `Successfully imported ${payload.imported ?? 0} todos` });
+        } catch (importError) {
+            const text = importError instanceof Error ? importError.message : 'Failed to import todos';
+            setMessage({ type: 'error', text });
+        } finally {
+            setImporting(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    }
+
+    return (
+        <div className="export-import-toolbar">
+            <button className="secondary-button" type="button" onClick={() => download('json')}>Export JSON</button>
+            <button className="secondary-button" type="button" onClick={() => download('csv')}>Export CSV</button>
+            <button
+                className="primary-button"
+                type="button"
+                disabled={importing}
+                title="Import creates new todos and does not merge with existing ones"
+                onClick={() => fileInputRef.current?.click()}
+            >
+                {importing ? 'Importing...' : 'Import'}
+            </button>
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={(event) => void importFile(event)}
+            />
+            {message ? <span className={`import-message import-message-${message.type}`} role="status">{message.text}</span> : null}
+        </div>
+    );
 }
 
 function formatDueDate(value: string | null): string {
@@ -869,6 +938,9 @@ export default function HomePage() {
                     <p className="header-copy">A calm place to capture, prioritize, and finish today&apos;s work.</p>
                 </div>
                 <div className="header-actions" style={{ display: 'flex', gap: 8 }}>
+                    <ExportImportToolbar onImported={() => {
+                        void Promise.all([loadTodos(), loadTags()]);
+                    }} />
                     <a className="calendar-link" href="/calendar" aria-label="Open calendar month view">
                         <span className="calendar-link-icon" aria-hidden="true">▦</span>
                         <span className="calendar-link-copy"><strong>Calendar</strong><small>Month view</small></span>
