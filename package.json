@@ -1,0 +1,29 @@
+{
+    "name": "todo-app",
+    "private": true,
+    "scripts": {
+        "dev": "next dev",
+        "build": "next build",
+        "start": "next start",
+        "test": "tsx --test"
+    },
+    "dependencies": {
+        "@simplewebauthn/browser": "^13.0.0",
+        "@simplewebauthn/server": "^13.0.0",
+        "better-sqlite3": "^11.10.0",
+        "jose": "^6.0.0",
+        "next": "^16.0.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+    },
+    "devDependencies": {
+        "@tailwindcss/postcss": "^4.3.3",
+        "@types/node": "^22.15.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "postcss": "^8.5.28",
+        "tailwindcss": "^4.3.3",
+        "tsx": "^4.19.2",
+        "typescript": "^5.8.3"
+    }
+}

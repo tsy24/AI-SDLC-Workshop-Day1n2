@@ -27,6 +27,8 @@ Build the app in dependency order: foundation + auth, then the todo core, then f
 ### Delivery phases
 
 #### Phase 0 — Shared foundation and contract lock (parallel with all teams, but central owner is Engineer 1)
+**Status: Complete for implementation handoff.** Formal test/build execution remains deferred by request; rate limiting and broader hardening remain Phase 5 work.
+
 1. Scaffold the app shell, Next.js App Router, Tailwind, and the auth/session layer.
 2. Define SQLite schema, shared DB interfaces, and all CRUD helpers in the single DB module.
 3. Add timezone utilities and strict validation helpers for dates, priorities, recurrence, reminders, and tags.
