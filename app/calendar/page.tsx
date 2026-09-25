@@ -129,7 +129,7 @@ export default function CalendarPage() {
     const todosByDate = new Map<string, CalendarTodo[]>();
     for (const todo of todos) {
         if (!todo.due_date) continue;
-        const date = todo.due_date.slice(0, 10);
+            const date = formatSingaporeDate(todo.due_date, 'yyyy-MM-dd');
         todosByDate.set(date, [...(todosByDate.get(date) ?? []), todo]);
     }
     const holidayByDate = new Map(holidays.map((holiday) => [holiday.date, holiday]));
