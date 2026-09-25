@@ -23,10 +23,34 @@ interface Todo {
     tags?: Tag[];
 }
 
+    interface Template {
+        id: number;
+        name: string;
+        description: string | null;
+        category: string | null;
+        title_template: string;
+        priority: Priority;
+        is_recurring: boolean;
+        recurrence_pattern: RecurrencePattern | null;
+        reminder_minutes: ReminderMinutes | null;
+        due_date_offset_minutes: number | null;
+    }
+
+    interface TemplateDraft {
+        title: string;
+        priority: Priority;
+        dueDate: string;
+        isRecurring: boolean;
+        recurrencePattern: RecurrencePattern;
+        reminderMinutes: ReminderMinutes | null;
+        subtasks: string[];
+    }
+
+    const reminderLabels: Record<ReminderMinutes, string> = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 1440: '1d', 2880: '2d', 10080: '1w' };
+
 const priorityOrder: Record<Priority, number> = { high: 0, medium: 1, low: 2 };
 const priorityLabels: Record<Priority, string> = { high: 'High', medium: 'Medium', low: 'Low' };
 const priorityColors: Record<Priority, string> = { high: '#b91c1c', medium: '#a16207', low: '#1d4ed8' };
-const reminderLabels: Record<ReminderMinutes, string> = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 1440: '1d', 2880: '2d', 10080: '1w' };
 
 function sortTodos(todos: Todo[]): Todo[] {
     return [...todos].sort((first, second) => {
@@ -139,6 +163,72 @@ function ManageTagsModal({
     );
 }
 
+    function SaveTemplateModal({ draft, onClose, onSave }: {
+        draft: TemplateDraft;
+        onClose: () => void;
+        onSave: (input: { name: string; description: string; category: string }) => Promise<void>;
+    }) {
+        const [name, setName] = useState('');
+        const [description, setDescription] = useState('');
+        const [category, setCategory] = useState('');
+
+        return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                <form onSubmit={(event) => { event.preventDefault(); void onSave({ name, description, category }); }} style={{ background: '#fff', width: 440, maxWidth: '90vw', borderRadius: 12, padding: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.2)', display: 'grid', gap: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h2 style={{ margin: 0 }}>Save as Template</h2>
+                        <button type="button" onClick={onClose}>Close</button>
+                    </div>
+                    <p style={{ margin: 0, color: '#4b5563' }}>{draft.title}</p>
+                    <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Template name" aria-label="Template name" required />
+                    <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" aria-label="Template description" rows={3} />
+                    <input value={category} onChange={(event) => setCategory(event.target.value)} placeholder="Category (optional)" aria-label="Template category" list="template-categories" />
+                    <datalist id="template-categories"><option value="Work" /><option value="Personal" /><option value="Finance" /><option value="Health" /><option value="Education" /></datalist>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button type="button" onClick={onClose}>Cancel</button>
+                        <button className="primary-button" type="submit" disabled={!name.trim()}>Save Template</button>
+                    </div>
+                </form>
+            </div>
+        );
+    }
+
+    function TemplateManagerModal({ templates, onClose, onUse, onDelete }: {
+        templates: Template[];
+        onClose: () => void;
+        onUse: (id: number) => Promise<void>;
+        onDelete: (id: number) => Promise<void>;
+    }) {
+        return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10 }}>
+                <div style={{ background: '#fff', width: 600, maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto', borderRadius: 12, padding: 20, boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <h2 style={{ margin: 0 }}>Templates</h2>
+                        <button type="button" onClick={onClose}>Close</button>
+                    </div>
+                    {templates.length === 0 ? <p>No templates saved yet.</p> : <div style={{ display: 'grid', gap: 10 }}>
+                        {templates.map((template) => <div key={template.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                                <strong>{template.name}</strong>
+                                {template.category ? <span className="meta-badge">{template.category}</span> : null}
+                            </div>
+                            {template.description ? <p style={{ margin: '8px 0', color: '#4b5563' }}>{template.description}</p> : null}
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                                <strong className="priority-badge" style={{ color: priorityColors[template.priority] }}>{priorityLabels[template.priority]}</strong>
+                                {template.is_recurring && template.recurrence_pattern ? <strong className="meta-badge">Repeat {template.recurrence_pattern}</strong> : null}
+                                {template.reminder_minutes ? <strong className="meta-badge">Bell {reminderLabels[template.reminder_minutes]}</strong> : null}
+                            </div>
+                            <div className="row-actions" style={{ marginTop: 10 }}>
+                                <button className="ghost-button" type="button" onClick={() => void onUse(template.id)}>Use</button>
+                                <button className="ghost-button danger" type="button" onClick={() => { if (window.confirm(`Delete template "${template.name}"?`)) void onDelete(template.id); }}>Delete</button>
+                            </div>
+                        </div>)}
+                    </div>}
+                </div>
+            </div>
+        );
+    }
+
 interface SubtaskSectionProps {
     todo: Todo;
     subtasks: Subtask[];
@@ -213,14 +303,19 @@ export default function HomePage() {
     const { permission, requestPermission } = useNotifications();
     const [todos, setTodos] = useState<Todo[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
+    const [templates, setTemplates] = useState<Template[]>([]);
     const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
     const [showTagModal, setShowTagModal] = useState(false);
+    const [showTemplateManager, setShowTemplateManager] = useState(false);
+    const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
     const [title, setTitle] = useState('');
     const [priority, setPriority] = useState<Priority>('medium');
     const [dueDate, setDueDate] = useState('');
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurrencePattern, setRecurrencePattern] = useState<RecurrencePattern>('daily');
     const [reminderMinutes, setReminderMinutes] = useState<ReminderMinutes | null>(null);
+    const [draftSubtasks, setDraftSubtasks] = useState<string[]>([]);
+    const [draftSubtaskTitle, setDraftSubtaskTitle] = useState('');
     const [priorityFilter, setPriorityFilter] = useState<Priority | 'all'>('all');
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editTitle, setEditTitle] = useState('');
@@ -239,6 +334,7 @@ export default function HomePage() {
     useEffect(() => {
         void loadTodos();
         void loadTags();
+            void loadTemplates();
     }, []);
 
     async function loadTodos() {
@@ -265,6 +361,17 @@ export default function HomePage() {
             setError(loadError instanceof Error ? loadError.message : 'Unable to load tags');
         }
     }
+
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/templates');
+                const payload = (await response.json()) as Template[] | { error: string };
+                if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to load templates');
+                setTemplates(payload as Template[]);
+            } catch (loadError) {
+                setError(loadError instanceof Error ? loadError.message : 'Unable to load templates');
+            }
+        }
 
     async function loadSubtasks(todoId: number) {
         try {
@@ -300,6 +407,13 @@ export default function HomePage() {
     function toggleSubtasksExpanded(todoId: number) {
         setExpandedSubtasks((current) => ({ ...current, [todoId]: !current[todoId] }));
     }
+
+        function addDraftSubtask() {
+            const trimmed = draftSubtaskTitle.trim();
+            if (!trimmed) return;
+            setDraftSubtasks((current) => [...current, trimmed]);
+            setDraftSubtaskTitle('');
+        }
 
     async function addSubtask(todoId: number) {
         const title = (newSubtaskTitle[todoId] ?? '').trim();
@@ -367,21 +481,81 @@ export default function HomePage() {
                     recurrence_pattern: recurrencePattern,
                     reminder_minutes: reminderMinutes,
                     tag_ids: selectedTagIds,
+                        subtasks: draftSubtasks.map((subtaskTitle, position) => ({ title: subtaskTitle, position })),
                 }),
             });
-            const todo = await response.json();
-            if (!response.ok) throw new Error(todo.error ?? 'Unable to create todo');
-            setTodos((current) => sortTodos([todo, ...current]));
+                const payload = await response.json() as { todo: Todo; subtasks: Subtask[] } | { error: string };
+                if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to create todo');
+                const { todo: createdTodo, subtasks: createdSubtasks } = payload as { todo: Todo; subtasks: Subtask[] };
+                setTodos((current) => sortTodos([createdTodo, ...current]));
+                setSubtasksByTodo((current) => ({ ...current, [createdTodo.id]: createdSubtasks }));
             setSelectedTagIds([]);
             setTitle('');
             setDueDate('');
             setPriority('medium');
             setIsRecurring(false);
             setReminderMinutes(null);
+                setDraftSubtasks([]);
+                setDraftSubtaskTitle('');
         } catch (createError) {
             setError(createError instanceof Error ? createError.message : 'Unable to create todo');
         }
     }
+
+        async function saveTemplate(input: { name: string; description: string; category: string }) {
+            try {
+                const response = await fetch('/api/templates', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: input.name,
+                        description: input.description || undefined,
+                        category: input.category || undefined,
+                        title_template: title,
+                        priority,
+                        due_date: dueDate || null,
+                        is_recurring: isRecurring,
+                        recurrence_pattern: isRecurring ? recurrencePattern : null,
+                        reminder_minutes: reminderMinutes,
+                        subtasks: draftSubtasks.map((subtaskTitle, position) => ({ title: subtaskTitle, position })),
+                    }),
+                });
+                const template = await response.json() as Template | { error: string };
+                if (!response.ok) throw new Error((template as { error: string }).error ?? 'Unable to save template');
+                setTemplates((current) => [...current, template as Template].sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })));
+                setShowSaveTemplateModal(false);
+                setError('');
+            } catch (saveError) {
+                setError(saveError instanceof Error ? saveError.message : 'Unable to save template');
+            }
+        }
+
+        async function useTemplate(id: number) {
+            try {
+                const response = await fetch(`/api/templates/${id}/use`, { method: 'POST' });
+                const payload = await response.json() as { todo: Todo; subtasks: Subtask[] } | { error: string };
+                if (!response.ok) throw new Error((payload as { error: string }).error ?? 'Unable to use template');
+                const result = payload as { todo: Todo; subtasks: Subtask[] };
+                setTodos((current) => sortTodos([result.todo, ...current]));
+                setSubtasksByTodo((current) => ({ ...current, [result.todo.id]: result.subtasks }));
+                setShowTemplateManager(false);
+                setError('');
+            } catch (useError) {
+                setError(useError instanceof Error ? useError.message : 'Unable to use template');
+            }
+        }
+
+        async function deleteTemplate(id: number) {
+            try {
+                const response = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+                const payload = await response.json() as { error?: string };
+                if (!response.ok) throw new Error(payload.error ?? 'Unable to delete template');
+                setTemplates((current) => current.filter((template) => template.id !== id));
+                setError('');
+            } catch (deleteError) {
+                setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete template');
+            }
+        }
 
     async function createTag(input: { name: string; color: string }) {
         const trimmed = input.name.trim();
@@ -539,6 +713,7 @@ export default function HomePage() {
                     <button className="secondary-button" type="button" onClick={() => void requestPermission()} disabled={permission === 'granted'}>
                         {permission === 'granted' ? 'Notifications On' : 'Enable Notifications'}
                     </button>
+                        <button className="ghost-button" type="button" onClick={() => setShowTemplateManager(true)}>Templates</button>
                     <button className="ghost-button" type="button" onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); window.location.assign('/login'); }}>Log out</button>
                 </div>
             </header>
@@ -557,6 +732,16 @@ export default function HomePage() {
                 <label><input type="checkbox" checked={isRecurring} disabled={!dueDate} onChange={(event) => setIsRecurring(event.target.checked)} /> Repeat</label>
                 {isRecurring ? <select value={recurrencePattern} onChange={(event) => setRecurrencePattern(event.target.value as RecurrencePattern)}><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></select> : null}
                 <select value={reminderMinutes ?? ''} disabled={!dueDate} onChange={(event) => setReminderMinutes(event.target.value ? Number(event.target.value) as ReminderMinutes : null)}><option value="">No reminder</option><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="60">1 hour</option><option value="120">2 hours</option><option value="1440">1 day</option><option value="2880">2 days</option><option value="10080">1 week</option></select>
+                    <select value="" onChange={(event) => { if (event.target.value) void useTemplate(Number(event.target.value)); }} aria-label="Use template">
+                        <option value="">Use Template</option>
+                        {templates.map((template) => <option key={template.id} value={template.id}>{template.category ? `${template.name} (${template.category})` : template.name}</option>)}
+                    </select>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', gridColumn: '1 / -1' }}>
+                        <input value={draftSubtaskTitle} onChange={(event) => setDraftSubtaskTitle(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addDraftSubtask(); } }} placeholder="Add draft subtask" aria-label="Add draft subtask" />
+                        <button type="button" onClick={addDraftSubtask}>Add subtask</button>
+                        {draftSubtasks.map((subtaskTitle, index) => <span key={`${subtaskTitle}-${index}`} className="meta-badge">{subtaskTitle} <button type="button" onClick={() => setDraftSubtasks((current) => current.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Remove draft subtask ${subtaskTitle}`}>x</button></span>)}
+                    </div>
+                    {title.trim() ? <button className="secondary-button" type="button" onClick={() => setShowSaveTemplateModal(true)}>Save as Template</button> : null}
                 <button className="primary-button" type="submit">Add task</button>
             </form>
                 <div className="list-toolbar">
@@ -579,6 +764,12 @@ export default function HomePage() {
             </div>
             {error ? <p className="error-banner" role="alert">{error}</p> : null}
                 {showTagModal ? <ManageTagsModal tags={tags} onClose={() => setShowTagModal(false)} onCreate={createTag} onUpdate={updateTag} onDelete={deleteTag} /> : null}
+                {showSaveTemplateModal ? <SaveTemplateModal
+                    draft={{ title, priority, dueDate, isRecurring, recurrencePattern, reminderMinutes, subtasks: draftSubtasks }}
+                    onClose={() => setShowSaveTemplateModal(false)}
+                    onSave={saveTemplate}
+                /> : null}
+                {showTemplateManager ? <TemplateManagerModal templates={templates} onClose={() => setShowTemplateManager(false)} onUse={useTemplate} onDelete={deleteTemplate} /> : null}
             {sections.map((section) => <section key={section.key} style={{ marginTop: 28 }}>
                 <div className="section-heading"><h2>{section.label}</h2><span>{section.items.length}</span></div>
                 <ul style={{ padding: 0, listStyle: 'none' }}>
