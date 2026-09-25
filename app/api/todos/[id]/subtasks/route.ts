@@ -18,7 +18,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const id = parseId((await params).id);
     const todo = id ? todoDB.findById(id) : undefined;
-    if (!todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
+    if (id === null || !todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
     return NextResponse.json(subtaskDB.findByTodoId(id));
 }
 
@@ -27,7 +27,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const id = parseId((await params).id);
     const todo = id ? todoDB.findById(id) : undefined;
-    if (!todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
+    if (id === null || !todo || todo.user_id !== session.userId) return NextResponse.json({ error: 'Todo not found' }, { status: 404 });
 
     let body: Record<string, unknown>;
     try {

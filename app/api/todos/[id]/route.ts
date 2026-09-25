@@ -44,8 +44,11 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const recurrencePattern = body.recurrence_pattern === undefined
         ? existing.recurrence_pattern
         : parseRecurrencePattern(body.recurrence_pattern);
+    const storedReminderMinutes = existing.reminder_minutes === null
+        ? null
+        : parseReminderMinutes(existing.reminder_minutes);
     const reminderMinutes = body.reminder_minutes === undefined
-        ? existing.reminder_minutes
+        ? storedReminderMinutes
         : parseReminderMinutes(body.reminder_minutes);
     if (reminderMinutes === undefined) return NextResponse.json({ error: 'Invalid reminder interval' }, { status: 400 });
     if (recurring && !dueDate) return NextResponse.json({ error: 'Recurring todos require a due date' }, { status: 400 });
