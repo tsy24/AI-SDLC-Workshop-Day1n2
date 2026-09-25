@@ -10,26 +10,27 @@ export default function LoginPage() {
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        fetch('/api/auth/me').then((response) => {
-            if (response.ok) router.replace('/');
-        });
+        void fetch('/api/auth/me')
+            .then((response) => {
+                if (response.ok) router.replace('/');
+            })
+            .catch(() => undefined);
     }, [router]);
 
     async function handleRegister(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
         setMessage('');
-        const response = await fetch('/api/auth/register-options', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-        });
-
-        const options = await response.json();
-        if (!response.ok) {
-            setMessage(options.error ?? 'Unable to register');
-            return;
-        }
         try {
+            const response = await fetch('/api/auth/register-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username }),
+            });
+            const options = await response.json();
+            if (!response.ok) {
+                setMessage(options.error ?? 'Unable to register');
+                return;
+            }
             const credential = await startRegistration({ optionsJSON: options });
             const verification = await fetch('/api/auth/register-verify', {
                 method: 'POST',
@@ -45,18 +46,17 @@ export default function LoginPage() {
 
     async function handleLogin() {
         setMessage('');
-        const response = await fetch('/api/auth/login-options', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username }),
-        });
-
-        const options = await response.json();
-        if (!response.ok) {
-            setMessage(options.error ?? 'Unable to log in');
-            return;
-        }
         try {
+            const response = await fetch('/api/auth/login-options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username }),
+            });
+            const options = await response.json();
+            if (!response.ok) {
+                setMessage(options.error ?? 'Unable to log in');
+                return;
+            }
             const credential = await startAuthentication({ optionsJSON: options });
             const verification = await fetch('/api/auth/login-verify', {
                 method: 'POST',

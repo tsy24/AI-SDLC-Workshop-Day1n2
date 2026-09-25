@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
-import { PRIORITY_VALUES, subtaskDB, todoDB } from '@/lib/db';
+import { PRIORITY_VALUES, subtaskDB, tagDB, todoDB } from '@/lib/db';
 import { isDueDateAtLeastOneMinuteAway, parseOptionalDueDate, parsePriority, parseRecurrencePattern, parseReminderMinutes, parseRecurring, parseTemplateSubtasks, parseTodoTitle } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
@@ -30,8 +30,9 @@ export async function POST(request: NextRequest) {
     const recurring = parseRecurring(body.is_recurring);
     const recurrencePattern = body.recurrence_pattern === undefined ? null : parseRecurrencePattern(body.recurrence_pattern);
     const reminderMinutes = parseReminderMinutes(body.reminder_minutes);
-        const hasSubtasks = body.subtasks !== undefined;
-        const subtasks = hasSubtasks ? parseTemplateSubtasks(body.subtasks) : [];
+     const hasSubtasks = body.subtasks !== undefined;
+     const subtasks = hasSubtasks ? parseTemplateSubtasks(body.subtasks) : [];
+    const tagIds = body.tag_ids === undefined ? [] : body.tag_ids;
 
     if (!title) return NextResponse.json({ error: 'Title is required and must be 500 characters or fewer' }, { status: 400 });
     if (dueDate === undefined) return NextResponse.json({ error: 'Due date must be a valid ISO date' }, { status: 400 });
@@ -42,6 +43,12 @@ export async function POST(request: NextRequest) {
     if (recurring && !dueDate) return NextResponse.json({ error: 'Recurring todos require a due date' }, { status: 400 });
     if (recurring && !recurrencePattern) return NextResponse.json({ error: 'Recurring todos require a valid recurrence pattern' }, { status: 400 });
     if (reminderMinutes !== null && !dueDate) return NextResponse.json({ error: 'Reminders require a due date' }, { status: 400 });
+    if (!Array.isArray(tagIds) || tagIds.some((tagId) => !Number.isInteger(tagId) || tagId < 1)) {
+        return NextResponse.json({ error: 'tag_ids must be an array of positive integers' }, { status: 400 });
+    }
+        if (tagIds.some((tagId) => !tagDB.findById(tagId, session.userId))) {
+            return NextResponse.json({ error: 'All tags must belong to the current user' }, { status: 400 });
+        }
     if (!isDueDateAtLeastOneMinuteAway(dueDate)) {
         return NextResponse.json({ error: 'Due date must be at least 1 minute in the future' }, { status: 400 });
     }
@@ -55,5 +62,7 @@ export async function POST(request: NextRequest) {
         recurrence_pattern: recurring ? recurrencePattern : null,
         reminder_minutes: reminderMinutes,
         }, subtasks);
-        return NextResponse.json(hasSubtasks ? { todo, subtasks: subtaskDB.findByTodoId(todo.id) } : todo, { status: 201 });
+    const tags = tagDB.replaceTodoTags(todo.id, tagIds as number[], session.userId);
+        const createdTodo = { ...todo, tags };
+        return NextResponse.json(hasSubtasks ? { todo: createdTodo, subtasks: subtaskDB.findByTodoId(todo.id) } : createdTodo, { status: 201 });
 }

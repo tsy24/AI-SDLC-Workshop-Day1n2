@@ -231,6 +231,18 @@ todo-app/
 npm run dev
 ```
 
+### Environment Configuration
+Copy `.env.example` to `.env.local` before using authentication locally. Local development uses:
+
+```text
+JWT_SECRET=replace-with-a-long-random-secret
+RP_ID=localhost
+RP_NAME=Todo App
+RP_ORIGIN=http://localhost:3000
+```
+
+For production, configure all four variables in the hosting provider. `RP_ID` must match the production hostname, `RP_ORIGIN` must be the complete HTTPS origin, and `JWT_SECRET` must be a unique random secret of at least 32 characters. The server fails closed if any production value is missing.
+
 Expected output:
 ```
   ▲ Next.js 16.0.1

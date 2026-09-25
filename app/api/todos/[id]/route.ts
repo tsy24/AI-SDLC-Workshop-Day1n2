@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth';
-import { type ReminderMinutes, todoDB } from '@/lib/db';
+import { tagDB, type ReminderMinutes, todoDB } from '@/lib/db';
 import { calculateNextDueDate } from '@/lib/recurrence';
 import { isDueDateAtLeastOneMinuteAway, parseOptionalDueDate, parsePriority, parseRecurrencePattern, parseReminderMinutes, parseRecurring, parseTodoTitle } from '@/lib/validation';
 
@@ -37,6 +37,13 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
     }
     const update: Parameters<typeof todoDB.update>[1] = {};
+    const tagIds = body.tag_ids;
+    if (tagIds !== undefined && (!Array.isArray(tagIds) || tagIds.some((tagId) => !Number.isInteger(tagId) || tagId < 1))) {
+        return NextResponse.json({ error: 'tag_ids must be an array of positive integers' }, { status: 400 });
+    }
+        if (Array.isArray(tagIds) && tagIds.some((tagId) => !tagDB.findById(tagId, session.userId))) {
+            return NextResponse.json({ error: 'All tags must belong to the current user' }, { status: 400 });
+        }
     const recurring = body.is_recurring === undefined ? existing.is_recurring : parseRecurring(body.is_recurring);
     if (recurring === null) return NextResponse.json({ error: 'is_recurring must be boolean' }, { status: 400 });
     const dueDate = body.due_date === undefined ? existing.due_date : parseOptionalDueDate(body.due_date);
@@ -85,6 +92,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     }
 
     const justCompleted = body.completed === true && !existing.completed;
+    if (Array.isArray(tagIds)) tagDB.replaceTodoTags(id as number, tagIds as number[], session.userId);
     if (justCompleted && recurring && recurrencePattern && dueDate) {
         const nextDueDate = calculateNextDueDate(dueDate, recurrencePattern);
         const result = todoDB.completeAndCreateNext(id as number, {
@@ -94,10 +102,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
             reminder_minutes: reminderMinutes === null || reminderMinutes === undefined ? null : reminderMinutes as ReminderMinutes,
             completed: true,
         }, nextDueDate);
-        return NextResponse.json(result);
+        const tags = tagDB.findByTodoId(id as number, session.userId);
+        return NextResponse.json(result ? { ...result, todo: { ...result.todo, tags }, nextInstance: { ...result.nextInstance, tags } } : result);
     }
 
-    return NextResponse.json(todoDB.update(id as number, update));
+    const updated = todoDB.update(id as number, update);
+    return NextResponse.json(updated ? { ...updated, tags: tagDB.findByTodoId(id as number, session.userId) } : updated);
 }
 
 export async function DELETE(_request: NextRequest, { params }: RouteContext) {
