@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAuthenticationResponse } from '@simplewebauthn/server';
-import { isoBase64URL } from '@simplewebauthn/server/helpers';
 
 import { createSession } from '@/lib/auth';
 import { authenticatorDB, challengeDB, userDB } from '@/lib/db';
@@ -37,7 +36,7 @@ export async function POST(request: NextRequest) {
         expectedRPID: process.env.RP_ID ?? 'localhost',
         credential: {
             id: authenticator.credential_id,
-            publicKey: new Uint8Array(authenticator.credential_public_key),
+            publicKey: new Uint8Array(authenticator.credential_public_key) as Uint8Array<ArrayBuffer>,
             counter: authenticator.counter ?? 0,
             transports: undefined,
         },

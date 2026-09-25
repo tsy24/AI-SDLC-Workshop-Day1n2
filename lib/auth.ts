@@ -13,11 +13,13 @@ export interface UserRecord {
 }
 
 const SESSION_COOKIE = 'session';
-const configuredSecret = process.env.JWT_SECRET;
-if (!configuredSecret && process.env.NODE_ENV === 'production') {
-    throw new Error('JWT_SECRET must be configured in production');
+function getJwtSecret(): Uint8Array {
+    const configuredSecret = process.env.JWT_SECRET;
+    if (!configuredSecret && process.env.NODE_ENV === 'production') {
+        throw new Error('JWT_SECRET must be configured in production');
+    }
+    return new TextEncoder().encode(configuredSecret ?? 'dev-secret-change-me');
 }
-const secret = new TextEncoder().encode(configuredSecret ?? 'dev-secret-change-me');
 
 export async function createSession(user: UserRecord): Promise<void> {
     const token = await new SignJWT({
@@ -27,7 +29,7 @@ export async function createSession(user: UserRecord): Promise<void> {
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('7d')
-        .sign(secret);
+        .sign(getJwtSecret());
 
     const cookieStore = await cookies();
     cookieStore.set(SESSION_COOKIE, token, {
@@ -48,7 +50,7 @@ export async function getSession(): Promise<Session | null> {
     }
 
     try {
-        const { payload } = await jwtVerify(token, secret);
+        const { payload } = await jwtVerify(token, getJwtSecret());
 
         if (typeof payload.userId !== 'number' || typeof payload.username !== 'string') {
             return null;
