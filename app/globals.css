@@ -645,6 +645,19 @@ main.app-shell {
     font-weight: 800;
 }
 
+.calendar-count {
+    align-self: flex-end;
+    min-width: 22px;
+    padding: 0.18rem 0.35rem;
+    border-radius: 999px;
+    background: var(--teal);
+    color: #fff;
+    font-size: 0.64rem;
+    font-weight: 800;
+    line-height: 1.1;
+    text-align: center;
+}
+
 .calendar-cell.today .calendar-date {
     background: var(--teal);
     color: #fff;
