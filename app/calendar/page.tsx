@@ -61,10 +61,12 @@ function CalendarCell({
     return (
         <button
             type="button"
+            data-date={day.date}
             className={`calendar-cell ${day.isCurrentMonth ? '' : 'outside-month'} ${day.isToday ? 'today' : ''} ${day.isPast ? 'past' : ''} ${day.isWeekend ? 'weekend' : ''}`}
             onClick={() => onSelect(day.date)}
         >
             <span className="calendar-date">{Number(day.date.slice(8))}</span>
+            {todos.length > 0 ? <span className="calendar-count" aria-label={`${todos.length} todos`}>{todos.length}</span> : null}
             {holiday ? <span className="holiday-label">{holiday.name}</span> : null}
             <span className="calendar-todos">
                 {visibleTodos.map((todo) => <span className={`calendar-todo priority-${todo.priority} ${todo.completed ? 'completed' : ''}`} key={todo.id}>{todo.title}</span>)}
@@ -102,6 +104,7 @@ export default function CalendarPage() {
                 if (active) {
                     setTodos(todoPayload);
                     setHolidays(holidayPayload.holidays ?? []);
+                    setError('');
                 }
             } catch (loadError) {
                 if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load calendar');

@@ -5,7 +5,9 @@
         "dev": "next dev",
         "build": "next build",
         "start": "next start",
-        "test": "tsx --test"
+        "test": "tsx --test",
+        "test:e2e": "playwright test",
+        "seed:holidays": "tsx scripts/seed-holidays.ts"
     },
     "dependencies": {
         "@simplewebauthn/browser": "^13.0.0",
@@ -17,6 +19,7 @@
         "react-dom": "^19.0.0"
     },
     "devDependencies": {
+        "@playwright/test": "^1.63.0",
         "@tailwindcss/postcss": "^4.3.3",
         "@types/better-sqlite3": "^9.6.0",
         "@types/node": "^22.15.0",
